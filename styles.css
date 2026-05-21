@@ -651,10 +651,12 @@ body.dark-mode .plan-row.drop-after::after {
 
 /* --- 구글 캘린더 연동 영역 프리미엄화 --- */
 .calendar-preview {
-  display: grid;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   min-height: auto;
   background: var(--page);
-  padding: 16px;
+  padding: 8px; /* 극세사 다이어트 여백 */
 }
 
 .google-logout-button {
@@ -676,41 +678,6 @@ body.dark-mode .google-logout-button:hover {
   background: rgba(239, 68, 68, 0.15) !important;
   border-color: rgba(239, 68, 68, 0.4) !important;
   color: #fca5a5 !important;
-}
-
-.calendar-empty {
-  display: grid;
-  place-items: center;
-  align-content: center;
-  gap: 10px;
-  min-height: 100%;
-  border: 1px dashed var(--line);
-  border-radius: var(--radius);
-  background: var(--panel);
-  color: var(--muted);
-  padding: 24px;
-  text-align: center;
-  box-shadow: var(--shadow-sm);
-  transition: all 0.2s ease;
-}
-
-.calendar-empty:hover {
-  border-color: var(--accent);
-  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.04);
-}
-
-.calendar-empty strong {
-  color: var(--primary);
-  font-family: 'Outfit', sans-serif;
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: -0.01em;
-}
-
-.calendar-empty span {
-  font-size: 11px;
-  line-height: 1.6;
-  max-width: 240px;
 }
 
 /* --- 에디터 툴바 프리미엄화 (미니멀리스트 리치 에디터 스타일) --- */
@@ -1445,218 +1412,7 @@ body.dark-mode .important-item:hover span {
   color: var(--text);
 }
 
-/* 통합 백업 및 클라우드 설정 영역 */
-.cloud-backup-section {
-  margin-top: 16px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius);
-  background: var(--panel);
-  overflow: hidden;
-  box-shadow: var(--shadow-sm);
-}
 
-.backup-settings-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 14px 18px;
-  background: var(--panel-soft);
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 700;
-  user-select: none;
-  transition: background 0.2s ease;
-  border-bottom: 1px solid var(--line-soft);
-}
-
-.backup-settings-header:hover {
-  background: var(--line-soft);
-}
-
-.accordion-arrow {
-  font-size: 11px;
-  color: var(--muted);
-  transition: transform 0.3s ease;
-}
-
-.backup-settings-header.active .accordion-arrow {
-  transform: rotate(180deg);
-}
-
-.backup-settings-body {
-  padding: 16px;
-  background: var(--panel);
-  display: flex;
-  flex-direction: column;
-  gap: 14px;
-}
-
-.setting-row {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 16px;
-}
-
-.setting-label {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-}
-
-.setting-label strong {
-  font-size: 13px;
-  color: var(--text);
-  font-weight: 600;
-}
-
-.setting-label span {
-  font-size: 11px;
-  color: var(--muted);
-}
-
-.setting-divider {
-  height: 1px;
-  background: var(--line-soft);
-}
-
-/* 토글 스위치 3D 입체 디자인 */
-.switch {
-  position: relative;
-  display: inline-block;
-  width: 48px;
-  height: 26px;
-  flex-shrink: 0;
-}
-
-.switch input {
-  opacity: 0;
-  width: 0;
-  height: 0;
-}
-
-.slider {
-  position: absolute;
-  cursor: pointer;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: var(--panel-strong);
-  transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 34px;
-  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
-}
-
-.slider:before {
-  position: absolute;
-  content: "";
-  height: 20px;
-  width: 20px;
-  left: 3px;
-  bottom: 3px;
-  background-color: white;
-  transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
-  border-radius: 50%;
-  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
-}
-
-input:checked + .slider {
-  background-color: #6366f1;
-}
-
-input:focus + .slider {
-  box-shadow: 0 0 1px #6366f1;
-}
-
-input:checked + .slider:before {
-  transform: translateX(22px);
-}
-
-/* 노션 입력 필드 */
-.notion-config-inputs {
-  border-top: 1px dashed var(--line-soft);
-  margin-top: 4px;
-}
-
-.config-field {
-  display: flex;
-  flex-direction: column;
-  gap: 6px;
-  margin-bottom: 10px;
-}
-
-.config-field:last-child {
-  margin-bottom: 0;
-}
-
-.field-title {
-  font-size: 11px;
-  font-weight: 700;
-  color: var(--muted);
-  letter-spacing: -0.01em;
-}
-
-.config-field input {
-  width: 100%;
-  height: 34px;
-  border: 1px solid var(--line-soft);
-  border-radius: var(--radius-sm);
-  background: var(--panel-soft);
-  color: var(--text);
-  font-size: 12px;
-  padding: 0 10px;
-  outline: none;
-  transition: all 0.2s ease;
-}
-
-.config-field input:focus {
-  border-color: var(--accent);
-  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
-}
-
-/* 통합 백업 실행 영역 */
-.backup-action-area {
-  padding: 14px 16px;
-  background: var(--panel-soft);
-  border-top: 1px solid var(--line-soft);
-  display: flex;
-  justify-content: center;
-}
-
-.backup-trigger-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  width: auto;
-  height: 46px;
-  padding: 0 18px;
-  border: none;
-  border-radius: var(--radius);
-  background: linear-gradient(135deg, #6366f1, #4f46e5);
-  color: #ffffff;
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
-  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
-  white-space: nowrap;
-}
-
-.backup-trigger-btn:hover {
-  transform: translateY(-2px);
-  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45);
-  background: linear-gradient(135deg, #4f46e5, #4338ca);
-}
-
-.backup-trigger-btn:active {
-  transform: translateY(0) scale(0.96);
-}
-
-.backup-trigger-btn .btn-icon {
-  font-size: 15px;
-}
 
 /* 미니 알림 토스트 (Toast Message) */
 .toast-container {

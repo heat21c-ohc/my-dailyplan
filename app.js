@@ -190,54 +190,6 @@ function bindPageEvents() {
   const disconnectBtn = document.querySelector("#disconnectGoogleBtn");
   if (disconnectBtn) disconnectBtn.addEventListener("click", disconnectGoogle);
 
-  /* 백업 설정 아코디언 슬라이드 */
-  const toggleBackupSettings = document.querySelector("#toggleBackupSettings");
-  const backupSettingsBody = document.querySelector("#backupSettingsBody");
-  if (toggleBackupSettings && backupSettingsBody) {
-    toggleBackupSettings.addEventListener("click", () => {
-      const isActive = toggleBackupSettings.classList.toggle("active");
-      backupSettingsBody.style.display = isActive ? "flex" : "none";
-    });
-  }
-
-  /* 백업 토글 스위치 및 입력 상자 데이터 바인딩 */
-  const sheetToggle = document.querySelector("#enableGoogleSheets");
-  const notionToggle = document.querySelector("#enableNotion");
-  const notionConfigInputs = document.querySelector("#notionConfigInputs");
-  const notionTokenInput = document.querySelector("#notionToken");
-  const notionDbIdInput = document.querySelector("#notionDbId");
-
-  if (sheetToggle) {
-    sheetToggle.addEventListener("change", () => {
-      cloudConfig.enableGoogleSheets = sheetToggle.checked;
-      saveCloudConfig();
-    });
-  }
-
-  if (notionToggle) {
-    notionToggle.addEventListener("change", () => {
-      cloudConfig.enableNotion = notionToggle.checked;
-      if (notionConfigInputs) {
-        notionConfigInputs.style.display = notionToggle.checked ? "flex" : "none";
-      }
-      saveCloudConfig();
-    });
-  }
-
-  if (notionTokenInput) {
-    notionTokenInput.addEventListener("input", () => {
-      cloudConfig.notionToken = notionTokenInput.value.trim();
-      saveCloudConfig();
-    });
-  }
-
-  if (notionDbIdInput) {
-    notionDbIdInput.addEventListener("input", () => {
-      cloudConfig.notionDbId = notionDbIdInput.value.trim();
-      saveCloudConfig();
-    });
-  }
-
   /* 오늘 하루 클라우드 통합 백업 실행 버튼 */
   const triggerBackupBtn = document.querySelector("#triggerCloudBackup");
   if (triggerBackupBtn) {
@@ -474,38 +426,20 @@ function hydrateImportantCheckboxes() {
 }
 
 /* ==========================================================================
-   Google & Notion Cloud Backup Integration Module (클라우드 연동 및 백업 메인 모듈)
+   Google Cloud Backup Integration Module (구글 클라우드 연동 및 백업 메인 모듈)
    ========================================================================== */
 
 /* 1. 클라우드 설정 정보 로드 및 바인딩 */
 function initCloudConfig() {
   const saved = localStorage.getItem(CLOUD_CONFIG_KEY);
+  // 구글 연동 완료 시 자동으로 백업이 상시 구동되도록 기본값을 true(참)로 상시 고정
+  cloudConfig.enableGoogleSheets = true;
+  
   if (!saved) return;
   
   try {
     const parsed = JSON.parse(saved);
-    cloudConfig.enableGoogleSheets = !!parsed.enableGoogleSheets;
-    cloudConfig.enableNotion = !!parsed.enableNotion;
-    cloudConfig.notionToken = parsed.notionToken || "";
-    cloudConfig.notionDbId = parsed.notionDbId || "";
     cloudConfig.spreadsheetId = parsed.spreadsheetId || "";
-    
-    // UI 동기화
-    const sheetToggle = document.querySelector("#enableGoogleSheets");
-    const notionToggle = document.querySelector("#enableNotion");
-    const notionConfigInputs = document.querySelector("#notionConfigInputs");
-    const notionTokenInput = document.querySelector("#notionToken");
-    const notionDbIdInput = document.querySelector("#notionDbId");
-    
-    if (sheetToggle) sheetToggle.checked = cloudConfig.enableGoogleSheets;
-    if (notionToggle) {
-      notionToggle.checked = cloudConfig.enableNotion;
-      if (notionConfigInputs) {
-        notionConfigInputs.style.display = cloudConfig.enableNotion ? "flex" : "none";
-      }
-    }
-    if (notionTokenInput) notionTokenInput.value = cloudConfig.notionToken;
-    if (notionDbIdInput) notionDbIdInput.value = cloudConfig.notionDbId;
   } catch (e) {
     console.error("Cloud config load error:", e);
   }
@@ -516,7 +450,7 @@ function saveCloudConfig() {
   localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(cloudConfig));
 }
 
-/* 2. 구글 Identity Services (GIS) 라이브러리 초기화 */
+/* 2. 구글 Identity Services (GIS, 구글 로그인 서비스) 라이브러리 초기화 */
 function initGoogleGIS() {
   if (typeof google === "undefined") {
     console.warn("구글 GIS 라이브러리가 아직 로드되지 않았사옵니다. 재시도 중...");
@@ -535,6 +469,8 @@ function initGoogleGIS() {
         }
         googleAccessToken = tokenResponse.access_token;
         sessionStorage.setItem("google_access_token", googleAccessToken);
+        cloudConfig.enableGoogleSheets = true; // 로그인 성공 시 백업 즉시 활성화
+        saveCloudConfig();
         showToast("🔑 Google 계정이 성공적으로 연동되었사옵니다!", "success");
         updateGoogleUI(true);
       }
@@ -598,8 +534,6 @@ function updateGoogleUI(isLinked) {
     if (statusText) statusText.textContent = "일정 및 클라우드 연동 상태";
   }
 }
-
-/* 3. 구글 연동 완료 및 관리 */
 
 /* 4. 구글 스프레드시트 백업 핵심 엔진 */
 async function backupToGoogleSheets(richData) {
@@ -665,7 +599,7 @@ async function backupToGoogleSheets(richData) {
       saveCloudConfig();
       
       // 첫 행에 머리글(열 타이틀) 작성
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:G1:append?valueInputOption=USER_ENTERED`, {
+      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
         method: "POST",
         headers: {
           "Authorization": `Bearer ${googleAccessToken}`,
@@ -684,176 +618,42 @@ async function backupToGoogleSheets(richData) {
   }
   
   // 4단계: 오늘 하루 일지를 격자 행(Row)에 덧붙이기(Append)
-  try {
-    const appendUrl = `https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`;
-    const rowData = [
-      richData.date,
-      richData.importantText,
-      richData.todosText,
-      richData.timelineText,
-      richData.memoText,
-      richData.thanksText,
-      richData.summaryText
-    ];
-    
-    const appendResponse = await fetch(appendUrl, {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${googleAccessToken}`,
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify({
-        values: [rowData]
-      })
-    });
-    
-    if (!appendResponse.ok) throw new Error("행 쓰기 API 호출 에러");
-  } catch (appendErr) {
-    console.error("Sheet Row Append Error:", appendErr);
-    throw new Error("엑셀 시트에 백업 추가를 완료하지 못했사옵니다.");
-  }
-}
-
-/* 5. 노션 API 백업 엔진 및 CORS 이중 안전장치 */
-async function backupToNotion(richData) {
-  const token = cloudConfig.notionToken;
-  const dbId = cloudConfig.notionDbId;
-  
-  if (!token || !dbId) {
-    throw new Error("노션 토큰 비밀번호와 데이터베이스 ID가 비어있사옵니다.");
-  }
-  
-  // 노션 데이터 추가에 필요한 API 페이로드(Payload) 조립
-  const notionBody = {
-    parent: { database_id: dbId },
-    properties: {
-      "날짜": {
-        date: { start: richData.date }
-      },
-      "오늘의 핵심업무": {
-        title: [
-          { text: { content: richData.importantText.slice(0, 100) } } // 노션 타이틀 열 대응
-        ]
-      },
-      "하루 요약": {
-        rich_text: [
-          { text: { content: richData.summaryText.slice(0, 2000) } }
-        ]
-      }
+  const appendResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
     },
-    children: [
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ text: { content: "🎯 오늘의 핵심업무 (Important)" } }]
-        }
-      },
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ text: { content: richData.importantText } }]
-        }
-      },
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ text: { content: "📋 할 일 목록 (TO DO LIST)" } }]
-        }
-      },
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ text: { content: richData.todosText || "등록된 할 일이 없사옵니다." } }]
-        }
-      },
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ text: { content: "⏰ 시간대별 타임라인 (TIME LINE)" } }]
-        }
-      },
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ text: { content: richData.timelineText || "등록된 타임라인이 없사옵니다." } }]
-        }
-      },
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ text: { content: "💡 아이디어 메모 (MEMO)" } }]
-        }
-      },
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ text: { content: richData.memoText || "메모가 비어 있사옵니다." } }]
-        }
-      },
-      {
-        object: "block",
-        type: "heading_2",
-        heading_2: {
-          rich_text: [{ text: { content: "🙏 감사 일기 (THANKS GOD)" } }]
-        }
-      },
-      {
-        object: "block",
-        type: "paragraph",
-        paragraph: {
-          rich_text: [{ text: { content: richData.thanksText || "기록이 비어 있사옵니다." } }]
-        }
-      }
-    ]
-  };
-
-  // 브라우저 직접 전송 시도 (CORS 오류 유발 가능성이 큼)
-  try {
-    const response = await fetch("https://api.notion.com/v1/pages", {
-      method: "POST",
-      headers: {
-        "Authorization": `Bearer ${token}`,
-        "Notion-Version": "2022-06-28",
-        "Content-Type": "application/json"
-      },
-      body: JSON.stringify(notionBody)
-    });
-    
-    if (!response.ok) {
-      const errText = await response.text();
-      throw new Error(`Notion API Error: ${response.status} - ${errText}`);
-    }
-  } catch (error) {
-    console.warn("Notion direct backup failed due to CORS or Network. Showing Google Apps Script guide...", error);
-    // CORS 보안 정책 등에 걸려 전송이 차단된 경우, 스마트 에러 구조 호출
-    showAppsScriptGuideModal(richData, notionBody);
-    throw new Error("CORS 보안 정책으로 브라우저 차단 감지! 구글 앱스 스크립트 중계 전송을 권장하옵니다.");
+    body: JSON.stringify({
+      values: [
+        [
+          richData.date,
+          richData.importantText,
+          richData.todosText,
+          richData.timelineText,
+          richData.memoText,
+          richData.thanksText,
+          richData.summaryText
+        ]
+      ]
+    })
+  });
+  
+  if (!appendResponse.ok) {
+    throw new Error("데이터 추가(Append) 요청이 실패하였사옵니다.");
   }
 }
 
-/* 6. 스마트 데이터 가공 및 클라우드 통합 백업 시퀀스 실행 */
+/* 5. 통합 백업 트리거 함수 */
 async function triggerUnifiedBackup() {
   const triggerBtn = document.querySelector("#triggerCloudBackup");
   if (triggerBtn) {
     triggerBtn.disabled = true;
-    triggerBtn.querySelector(".btn-label").textContent = "백업 데이터 가공 및 클라우드 전송 중...";
+    const labelEl = triggerBtn.querySelector(".btn-label");
+    if (labelEl) labelEl.textContent = "백업 중...";
   }
   
   try {
-    if (!cloudConfig.enableGoogleSheets && !cloudConfig.enableNotion) {
-      showToast("⚠️ 백업하실 클라우드 설정(구글 시트 또는 노션)을 하나 이상 켜 주시옵소서.", "warning");
-      return;
-    }
-    
-    // [중요 특허 기술] 무손실 데이터 가공 처리기
     const richData = {
       date: state.planDate,
       importantText: "",
@@ -864,90 +664,56 @@ async function triggerUnifiedBackup() {
       summaryText: stripHtml(state.editors.summary || "")
     };
     
-    // 중요 업무 가공
+    // 중요 업무 3가지 텍스트 조합
     const imp1 = stripHtml(state.editors.important1 || "");
     const imp2 = stripHtml(state.editors.important2 || "");
     const imp3 = stripHtml(state.editors.important3 || "");
     const done = state.importantDone || {};
     
-    const imp1Str = imp1 ? `${done.important1 ? "[완료] " : "[대기] "} ${imp1}` : "";
-    const imp2Str = imp2 ? `${done.important2 ? "[완료] " : "[대기] "} ${imp2}` : "";
-    const imp3Str = imp3 ? `${done.important3 ? "[완료] " : "[대기] "} ${imp3}` : "";
-    richData.importantText = [imp1Str, imp2Str, imp3Str].filter(Boolean).join(" \n");
+    const imp1Str = imp1 ? `${done.important1 ? "[완료]" : "[대기]"} ${imp1}` : "";
+    const imp2Str = imp2 ? `${done.important2 ? "[완료]" : "[대기]"} ${imp2}` : "";
+    const imp3Str = imp3 ? `${done.important3 ? "[완료]" : "[대기]"} ${imp3}` : "";
+    richData.importantText = [imp1Str, imp2Str, imp3Str].filter(Boolean).join("\n");
     
-    // 할 일 목록 (TO DO LIST) 가로 1줄 무손실 압축 포맷화
+    // 할 일 목록 (TO DO LIST) 무손실 압축 포맷화
     if (state.todos && state.todos.length > 0) {
       const todoRows = state.todos.map((item, index) => {
-        if (!item.task.trim()) return null;
+        if (!item.task || !item.task.trim()) return null;
         let rowStr = `${index + 1}. [ ] ${item.task.trim()}`;
         if (item.start || item.end) {
           rowStr += ` (기한: ${item.start || "미지정"} ~ ${item.end || "미지정"})`;
         }
         return rowStr;
       }).filter(Boolean);
-      richData.todosText = todoRows.join(" \n");
+      richData.todosText = todoRows.join("\n");
     }
     
-    // 시간 순서별 실행 기록 (TIME LINE) 가로 1줄 무손실 압축 포맷화
+    // 시간 순서별 실행 기록 (TIME LINE) 무손실 압축 포맷화
     if (state.timeline && state.timeline.length > 0) {
       const timelineRows = state.timeline.map((item, index) => {
-        if (!item.task.trim()) return null;
+        if (!item.task || !item.task.trim()) return null;
         let rowStr = `${index + 1}. [${item.start ? item.start.replace("T", " ") : "시작 미지정"} ~ ${item.end ? item.end.replace("T", " ") : "마침 미지정"}] ${item.task.trim()}`;
         return rowStr;
       }).filter(Boolean);
-      richData.timelineText = timelineRows.join(" \n");
+      richData.timelineText = timelineRows.join("\n");
     }
-    
-    let googleSuccess = false;
-    let notionSuccess = false;
-    let notionCorsPrompted = false;
     
     // 구글 스프레드시트 백업 실행
-    if (cloudConfig.enableGoogleSheets) {
-      try {
-        await backupToGoogleSheets(richData);
-        googleSuccess = true;
-      } catch (sheetErr) {
-        showToast(`❌ 구글 시트 백업 실패: ${sheetErr.message}`, "error");
-      }
-    }
-    
-    // 노션 백업 실행
-    if (cloudConfig.enableNotion) {
-      try {
-        await backupToNotion(richData);
-        notionSuccess = true;
-      } catch (notionErr) {
-        if (notionErr.message.includes("CORS")) {
-          notionCorsPrompted = true; // Apps Script 가이드 모달이 열림
-        } else {
-          showToast(`❌ 노션 백업 실패: ${notionErr.message}`, "error");
-        }
-      }
-    }
-    
-    // 최종 상태 토스트 메시지 알림
-    if (googleSuccess && notionSuccess) {
-      showToast("📥 구글 시트 및 노션 백업이 모두 완료되었사옵니다!", "success");
-    } else if (googleSuccess && !cloudConfig.enableNotion) {
-      showToast("📥 구글 스프레드시트 백업 성공!", "success");
-    } else if (notionSuccess && !cloudConfig.enableGoogleSheets) {
-      showToast("📥 Notion 데이터베이스 백업 성공!", "success");
-    } else if (googleSuccess && notionCorsPrompted) {
-      showToast("📥 구글 시트는 저장 완료! 단, 노션은 보안 우회 가이드를 띄웠사옵니다.", "warning");
-    }
-    
-  } catch (generalErr) {
-    showToast(`❌ 통합 백업 중 예기치 못한 에러 발생: ${generalErr.message}`, "error");
+    await backupToGoogleSheets(richData);
+    showToast("📥 구글 스프레드시트 백업 성공!", "success");
+  } catch (error) {
+    showToast(`❌ 백업 실패: ${error.message}`, "error");
+    console.error("Backup error:", error);
   } finally {
     if (triggerBtn) {
       triggerBtn.disabled = false;
-      triggerBtn.querySelector(".btn-label").textContent = "오늘 하루 클라우드 통합 백업 전송";
+      const labelEl = triggerBtn.querySelector(".btn-label");
+      if (labelEl) labelEl.textContent = "통합 백업 전송";
     }
   }
 }
 
-/* HTML 태그를 날려 일반 텍스트만 추출하는 기법 */
+/* 6. HTML 태그를 날려 일반 텍스트만 추출하는 기법 */
 function stripHtml(html) {
   const tmp = document.createElement("DIV");
   tmp.innerHTML = html;
@@ -978,122 +744,3 @@ function showToast(message, type = "success") {
     toast.classList.remove("show");
   }, 3500);
 }
-
-/* 8. 노션 브라우저 CORS 차단 해결을 위한 구글 Apps Script 연동 가이드 모달 팝업 */
-function showAppsScriptGuideModal(richData, notionPayload) {
-  // 모달이 이미 깔려 있다면 재사용
-  let modal = document.querySelector("#notionCorsModal");
-  if (modal) {
-    modal.remove();
-  }
-  
-  modal = document.createElement("div");
-  modal.id = "notionCorsModal";
-  
-  // 화려하고 직관적인 입체 모달 구조 및 디자인
-  modal.setAttribute("style", `
-    position: fixed;
-    top: 0; left: 0; right: 0; bottom: 0;
-    background: rgba(15, 23, 42, 0.7);
-    backdrop-filter: blur(8px);
-    z-index: 10000;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    padding: 20px;
-    font-family: 'Inter', sans-serif;
-  `);
-  
-  // 구글 앱스 스크립트 웹앱 중계 코드 조립
-  const scriptCode = `
-function doPost(e) {
-  var data = JSON.parse(e.postData.contents);
-  var notionToken = data.token;
-  var payload = data.payload;
-  
-  var options = {
-    "method" : "post",
-    "contentType": "application/json",
-    "headers": {
-      "Authorization": "Bearer " + notionToken,
-      "Notion-Version": "2022-06-28"
-    },
-    "payload" : JSON.stringify(payload),
-    "muteHttpExceptions": true
-  };
-  
-  var response = UrlFetchApp.fetch("https://api.notion.com/v1/pages", options);
-  
-  return ContentService.createTextOutput(JSON.stringify({
-    "status": response.getResponseCode(),
-    "body": response.getContentText()
-  })).setMimeType(ContentService.MimeType.JSON);
-}
-  `.trim();
-  
-  modal.innerHTML = `
-    <div style="
-      background: var(--panel, #ffffff);
-      color: var(--text, #0f172a);
-      width: min(650px, 100%);
-      max-height: 85vh;
-      overflow-y: auto;
-      border-radius: var(--radius, 16px);
-      border: 1px solid var(--line-soft, #e2e8f0);
-      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-      padding: 28px;
-      display: flex;
-      flex-direction: column;
-      gap: 16px;
-      position: relative;
-    ">
-      <h3 style="margin: 0; font-size: 18px; font-weight: 800; color: #4f46e5; display:flex; align-items:center; gap:8px;">
-        🛡️ 노션 백업 CORS 브라우저 차단 해결 안내
-      </h3>
-      <p style="font-size: 13px; line-height: 1.6; margin: 0; color: var(--muted, #64748b);">
-        주군, 브라우저의 강력한 보안 정책인 <strong>CORS(교차 출처 차단)</strong>로 인해 웹 화면에서 노션(Notion) 서버로 직접 백업 데이터를 쏘는 작업이 차단되었사옵니다. 
-        하지만 공명이 설계한 <strong>구글 Apps Script(앱스 스크립트) 중계 서버</strong>를 심으시면 CORS 에러가 100% 차단 없이 무료로 통과되옵니다.
-      </p>
-      
-      <div style="background: var(--panel-soft, #f1f5f9); border-radius: var(--radius-sm, 8px); padding: 14px; font-size: 12px; line-height: 1.6;">
-        <strong>🛠️ 초간단 3단계 중계서버 개설법:</strong><br>
-        1. 구글 시트 상단 메뉴 <strong>[확장 프로그램] -> [Apps Script]</strong>를 클릭하여 실행합니다.<br>
-        2. 화면에 떠 있는 기존 기본 코드를 지우고, 아래의 소스코드를 그대로 <strong>복사하여 붙여넣습니다.</strong><br>
-        3. 우측 상단 <strong>[배포] -> [새 배포]</strong> 클릭 -> 유형 선택 톱니바퀴에서 <strong>[웹 앱]</strong> 선택 -> 엑세스할 수 있는 사용자: <strong>[모든 사용자(Anyone)]</strong>로 설정 후 배포합니다.<br>
-        4. 배포 성공 시 뜨는 <strong>웹 앱 URL 주소</strong>를 메모해 두었다가 활용하시옵소서!
-      </div>
-      
-      <div>
-        <span style="font-size: 11px; font-weight:700; color:var(--muted);">📋 복사용 Google Apps Script 소스코드:</span>
-        <textarea readonly style="
-          width: 100%; height: 120px; 
-          font-family: monospace; font-size: 11px; 
-          background: #1e293b; color: #38bdf8;
-          border: 1px solid var(--line-soft); border-radius: 6px;
-          padding: 8px; margin-top: 4px; resize: none;
-        ">${scriptCode}</textarea>
-      </div>
-
-      <div style="display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px;">
-        <button id="closeCorsModalBtn" style="
-          background: #4f46e5; color: #ffffff;
-          border: none; border-radius: 8px;
-          padding: 10px 20px; font-weight: 700; font-size: 12px;
-          cursor: pointer; transition: background 0.2s;
-        ">안내 확인 완료</button>
-      </div>
-    </div>
-  `;
-  
-  document.body.appendChild(modal);
-  
-  // 닫기 버튼 이벤트 바인딩
-  const closeBtn = modal.querySelector("#closeCorsModalBtn");
-  if (closeBtn) {
-    closeBtn.addEventListener("click", () => {
-      modal.remove();
-    });
-  }
-}
-
-init();

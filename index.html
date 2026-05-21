@@ -98,13 +98,10 @@
                   <p id="calendarStatusText">일정 및 클라우드 연동 상태</p>
                 </div>
               </div>
-              <div class="calendar-preview">
+              <div class="calendar-preview" style="padding: 12px; display: flex; align-items: center; justify-content: center;">
                 <!-- 1. 구글 연동 전 화면 -->
-                <div id="calendarUnlinked" class="calendar-empty">
-                  <div class="google-brand-icon" style="font-size: 32px; margin-bottom: 8px;">🔑</div>
-                  <strong>Google 계정 연동 대기 중</strong>
-                  <span style="margin-bottom: 16px;">구글 로그인을 하시면 오늘 일정 조회와 구글 스프레드시트 백업이 활성화됩니다.</span>
-                  <button id="connectGoogleBtn" class="google-login-button" type="button">
+                <div id="calendarUnlinked" style="width: 100%; display: flex; justify-content: center;">
+                  <button id="connectGoogleBtn" class="google-login-button" type="button" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: var(--radius); font-size: 13px; font-weight: 700; cursor: pointer;">
                     <span class="g-logo">
                       <svg viewBox="0 0 24 24" width="18" height="18">
                         <path fill="#4285F4" d="M23.745 12.27c0-.7-.06-1.4-.19-2.07H12v3.92h6.69c-.29 1.5-.1.8-2.6 2.77l4.08 3.16c2.39-2.2 3.77-5.46 3.77-8.91l-.2-.88z"/>
@@ -118,63 +115,16 @@
                 </div>
 
                 <!-- 2. 구글 연동 후 화면 -->
-                <div id="calendarLinked" class="calendar-events-container" style="display: none; width: 100%;">
-                  <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
-                    <a id="openGoogleCalendarBtn" href="https://calendar.google.com" target="_blank" class="google-calendar-link-btn" style="text-decoration: none; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: var(--radius); background: #4285F4; border: none; color: #ffffff; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
+                <div id="calendarLinked" style="display: none; width: 100%;">
+                  <div style="display: flex; gap: 8px; width: 100%; align-items: center;">
+                    <a id="openGoogleCalendarBtn" href="https://calendar.google.com" target="_blank" class="google-calendar-link-btn" style="text-decoration: none; flex: 2; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: var(--radius); background: #4285F4; border: none; color: #ffffff; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
                       📅 구글 캘린더 열기 &amp; 일정 편집
                     </a>
-                    <button id="disconnectGoogleBtn" class="google-logout-button" type="button" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: var(--radius); background: var(--panel-soft); border: 1px solid var(--line-soft); color: #ef4444; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
-                      🔒 Google 로그아웃 (연동 해제)
+                    <button id="disconnectGoogleBtn" class="google-logout-button" type="button" style="flex: 1; display: inline-flex; align-items: center; justify-content: center; gap: 6px; padding: 12px; border-radius: var(--radius); background: var(--panel-soft); border: 1px solid var(--line-soft); color: #ef4444; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                      🔒 로그아웃
                     </button>
                   </div>
                 </div>
-              </div>
-              
-              <!-- 3. 통합 클라우드 백업 및 제어 영역 -->
-              <div class="cloud-backup-section">
-                <div class="backup-settings-header" id="toggleBackupSettings">
-                  <span>⚙️ 통합 백업 및 클라우드 설정</span>
-                  <span class="accordion-arrow" id="settingsArrow">▼</span>
-                </div>
-                
-                <div class="backup-settings-body" id="backupSettingsBody" style="display: none;">
-                  <div class="setting-row">
-                    <label class="setting-label">
-                      <strong>구글 스프레드시트 백업</strong>
-                      <span>구글 드라이브 내 엑셀 시트에 데이터 보관</span>
-                    </label>
-                    <label class="switch">
-                      <input type="checkbox" id="enableGoogleSheets" />
-                      <span class="slider"></span>
-                    </label>
-                  </div>
-                  
-                  <div class="setting-divider"></div>
-                  
-                  <div class="setting-row">
-                    <label class="setting-label">
-                      <strong>노션(Notion) 백업</strong>
-                      <span>개인 노션 데이터베이스 표로 일기 전송</span>
-                    </label>
-                    <label class="switch">
-                      <input type="checkbox" id="enableNotion" />
-                      <span class="slider"></span>
-                    </label>
-                  </div>
-                  
-                  <div class="notion-config-inputs" id="notionConfigInputs" style="display: none; padding-top: 12px; gap: 8px; flex-direction: column;">
-                    <div class="config-field">
-                      <span class="field-title">노션 API 비밀번호 토큰 (Integration Token)</span>
-                      <input type="password" id="notionToken" placeholder="secret_로 시작하는 토큰 입력" />
-                    </div>
-                    <div class="config-field">
-                      <span class="field-title">노션 표 데이터베이스 ID (Database ID)</span>
-                      <input type="text" id="notionDbId" placeholder="32자리 데이터베이스 아이디 입력" />
-                    </div>
-                  </div>
-                </div>
-                
-                <!-- 통합 백업 전송 버튼이 상단 헤더로 이동되었습니다 -->
               </div>
             </section>
 
