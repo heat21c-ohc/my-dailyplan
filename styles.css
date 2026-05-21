@@ -652,9 +652,30 @@ body.dark-mode .plan-row.drop-after::after {
 /* --- 구글 캘린더 연동 영역 프리미엄화 --- */
 .calendar-preview {
   display: grid;
-  min-height: 260px;
+  min-height: auto;
   background: var(--page);
   padding: 16px;
+}
+
+.google-logout-button {
+  background: var(--panel-soft) !important;
+  border: 1px solid var(--line-soft) !important;
+  color: #ef4444 !important;
+  transition: all 0.22s cubic-bezier(0.16, 1, 0.3, 1) !important;
+}
+
+.google-logout-button:hover {
+  background: #fee2e2 !important;
+  border-color: #fca5a5 !important;
+  color: #dc2626 !important;
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08);
+}
+
+body.dark-mode .google-logout-button:hover {
+  background: rgba(239, 68, 68, 0.15) !important;
+  border-color: rgba(239, 68, 68, 0.4) !important;
+  color: #fca5a5 !important;
 }
 
 .calendar-empty {

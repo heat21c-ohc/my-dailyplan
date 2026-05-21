@@ -97,10 +97,6 @@
                   <h2 id="calendarTitle">Google &amp; Cloud</h2>
                   <p id="calendarStatusText">일정 및 클라우드 연동 상태</p>
                 </div>
-                <div class="calendar-header-controls" style="display: flex; gap: 8px; align-items: center;">
-                  <button class="calendar-icon-btn" id="syncCalendar" type="button" title="일정 새로고침" style="display: none;">🔄</button>
-                  <button class="calendar-icon-btn" id="disconnectGoogle" type="button" title="구글 연동 해제" style="display: none; background: #fee2e2; color: #ef4444;">×</button>
-                </div>
               </div>
               <div class="calendar-preview">
                 <!-- 1. 구글 연동 전 화면 -->
@@ -117,18 +113,20 @@
                         <path fill="#EA4335" d="M12 4.77c1.77 0 3.35.6 4.6 1.8l3.43-3.43C17.96 1.19 15.24 0 12 0 7.37 0 3.33 2.61 1.37 6.5L5.55 9.66c.91-2.73 3.45-4.76 6.45-4.76z"/>
                       </svg>
                     </span>
-                    <span class="g-btn-text">Google 계정으로 연동</span>
+                    <span class="g-btn-text">Google 로그인 연동</span>
                   </button>
                 </div>
 
-                <!-- 2. 구글 연동 후 화면 (일정 목록) -->
+                <!-- 2. 구글 연동 후 화면 -->
                 <div id="calendarLinked" class="calendar-events-container" style="display: none; width: 100%;">
-                  <div style="margin-bottom: 12px; display: flex; justify-content: center;">
-                    <a id="openGoogleCalendarBtn" href="https://calendar.google.com" target="_blank" class="google-calendar-link-btn" style="text-decoration: none; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: var(--radius-sm); background: var(--panel-soft); border: 1px solid var(--line-soft); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                  <div style="display: flex; flex-direction: column; gap: 10px; width: 100%;">
+                    <a id="openGoogleCalendarBtn" href="https://calendar.google.com" target="_blank" class="google-calendar-link-btn" style="text-decoration: none; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 12px; border-radius: var(--radius); background: #4285F4; border: none; color: #ffffff; font-size: 13px; font-weight: 700; cursor: pointer; transition: all 0.2s;">
                       📅 구글 캘린더 열기 &amp; 일정 편집
                     </a>
+                    <button id="disconnectGoogleBtn" class="google-logout-button" type="button" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: var(--radius); background: var(--panel-soft); border: 1px solid var(--line-soft); color: #ef4444; font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                      🔒 Google 로그아웃 (연동 해제)
+                    </button>
                   </div>
-                  <div id="calendarEventsList" class="calendar-events-list"></div>
                 </div>
               </div>
               
