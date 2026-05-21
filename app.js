@@ -1,22 +1,23 @@
 const STORAGE_KEY_PREFIX = "daily-plan-state-v1-";
 const LEGACY_STORAGE_KEY = "daily-plan-state-v1";
 const THEME_STORAGE_KEY = "daily-plan-theme"; /* 사용자 테마 설정 저장용 키 */
-const CLOUD_CONFIG_KEY = "daily-plan-cloud-config"; /* 클라우드 설정 상태 저장용 키 */
+const CLOUD_CONFIG_KEY = "daily-plan-cloud-config"; /* 드라이브 동기화 파일 ID 캐싱용 키 */
+const LOCAL_MODIFIED_KEY = "daily-plan-last-modified"; /* 마지막 수정 시각(ms) - 기기 간 충돌 판별용 */
+const SYNC_FILE_NAME = "my_dailyplan_sync.json"; /* 사용자 드라이브에 저장되는 동기화 파일명 */
 const GOOGLE_CLIENT_ID = "552800594246-klpv3sg3m7tp72r633kuhkeg945ell20.apps.googleusercontent.com"; /* 주군의 Google Client ID */
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file"; /* 비민감 권한만 사용, 구글 검증 불필요 */
 const DEFAULT_TODO_ROWS = 6;
 const DEFAULT_TIMELINE_ROWS = 6;
 
 // 구글 API 연동 런타임 변수
 let googleAccessToken = sessionStorage.getItem("google_access_token") || null;
 let tokenClient = null;
+let userEmail = null; /* 로그인 사용자 이메일 (캘린더 임베드 src용) */
+let cloudSyncTimer = 0; /* 드라이브 자동 동기화 디바운스 타이머 */
 
-// 클라우드 하이브리드 백업 사용자 설정 값
+// 드라이브 동기화 설정 (앱이 생성한 동기화 파일 ID 캐싱)
 const cloudConfig = {
-  enableGoogleSheets: false,
-  enableNotion: false,
-  notionToken: "",
-  notionDbId: "",
-  spreadsheetId: "" /* 구글 드라이브 생성 시트 고유 ID 캐싱 */
+  syncFileId: ""
 };
 
 const state = {
@@ -67,8 +68,8 @@ let saveTimer = 0;
 init();
 
 function init() {
-  initTheme(); /* 페이지 구동 즉시 테마 초기화 실행 */
-  initCloudConfig(); /* 클라우드 백업 설정 정보 로드 및 바인딩 */
+  initTheme();
+  initCloudConfig();
   migrateLegacyData();
   loadState();
   ensureRows("todos", DEFAULT_TODO_ROWS);
@@ -77,16 +78,16 @@ function init() {
   renderList("todos");
   renderList("timeline");
   hydrateEditors();
-  hydrateImportantCheckboxes(); /* 중요 업무 완료 체크박스 상태 동기화 */
+  hydrateImportantCheckboxes();
   bindPageEvents();
-  initGoogleGIS(); /* 구글 Identity Services SDK 초기화 실행 */
+  initGoogleGIS();
 }
 
 /* 테마 초기화 기능 (로컬 저장소 상태 복원) */
 function initTheme() {
   const savedTheme = localStorage.getItem(THEME_STORAGE_KEY);
   const toggleBtn = document.querySelector("#themeToggle");
-  
+
   if (savedTheme === "dark") {
     document.body.classList.add("dark-mode");
     if (toggleBtn) {
@@ -122,7 +123,7 @@ function bindPageEvents() {
     renderList("todos");
     renderList("timeline");
     hydrateEditors();
-    hydrateImportantCheckboxes(); /* 중요 업무 완료 체크박스 상태 동기화 */
+    hydrateImportantCheckboxes();
   });
 
   document.querySelector("#addTodo").addEventListener("click", () => addRow("todos"));
@@ -141,7 +142,7 @@ function bindPageEvents() {
     select.addEventListener("change", () => {
       if (activeEditor) activeEditor.focus();
       document.execCommand(select.dataset.command, false, select.value);
-      select.value = ""; // '가' 표시 플레이스홀더 복원
+      select.value = "";
       scheduleSave();
     });
   });
@@ -170,7 +171,7 @@ function bindPageEvents() {
     checkbox.addEventListener("change", () => {
       const field = checkbox.dataset.checkbox;
       state.importantDone[field] = checkbox.checked;
-      
+
       const card = checkbox.closest(".important-item");
       if (card) {
         if (checkbox.checked) {
@@ -183,17 +184,17 @@ function bindPageEvents() {
     });
   });
 
-  /* --- 구글 및 클라우드 통합 설정 리스너 바인딩 --- */
+  /* --- 구글 연동 및 동기화 리스너 바인딩 --- */
   const connectBtn = document.querySelector("#connectGoogleBtn");
   if (connectBtn) connectBtn.addEventListener("click", connectGoogle);
-  
+
   const disconnectBtn = document.querySelector("#disconnectGoogleBtn");
   if (disconnectBtn) disconnectBtn.addEventListener("click", disconnectGoogle);
 
-  /* 오늘 하루 클라우드 통합 백업 실행 버튼 */
-  const triggerBackupBtn = document.querySelector("#triggerCloudBackup");
-  if (triggerBackupBtn) {
-    triggerBackupBtn.addEventListener("click", triggerUnifiedBackup);
+  /* 헤더의 수동 동기화 버튼 */
+  const syncBtn = document.querySelector("#triggerCloudBackup");
+  if (syncBtn) {
+    syncBtn.addEventListener("click", manualSync);
   }
 }
 
@@ -213,8 +214,8 @@ function loadState() {
     state.todos = Array.isArray(parsed.todos) ? parsed.todos : [];
     state.timeline = Array.isArray(parsed.timeline) ? parsed.timeline : [];
     state.editors = parsed.editors && typeof parsed.editors === "object" ? parsed.editors : {};
-    state.importantDone = parsed.importantDone && typeof parsed.importantDone === "object" 
-      ? parsed.importantDone 
+    state.importantDone = parsed.importantDone && typeof parsed.importantDone === "object"
+      ? parsed.importantDone
       : { important1: false, important2: false, important3: false };
   } catch {
     localStorage.removeItem(key);
@@ -228,6 +229,8 @@ function loadState() {
 function saveState() {
   const key = getStorageKeyForDate(state.planDate);
   localStorage.setItem(key, JSON.stringify(state));
+  localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now())); /* 수정 시각 갱신 (충돌 판별용) */
+  scheduleCloudSync(); /* 로그인 상태면 드라이브로 자동 업로드 예약 */
 }
 
 function scheduleSave() {
@@ -413,7 +416,7 @@ function hydrateImportantCheckboxes() {
     const field = checkbox.dataset.checkbox;
     const isChecked = !!(state.importantDone && state.importantDone[field]);
     checkbox.checked = isChecked;
-    
+
     const card = checkbox.closest(".important-item");
     if (card) {
       if (isChecked) {
@@ -426,59 +429,55 @@ function hydrateImportantCheckboxes() {
 }
 
 /* ==========================================================================
-   Google Cloud Backup Integration Module (구글 클라우드 연동 및 백업 메인 모듈)
+   Google Drive Sync Module (구글 드라이브 기반 기기 간 동기화 모듈)
+   - 권한: userinfo.email + drive.file (둘 다 비민감, 구글 검증 불필요)
+   - 저장: 사용자 본인 드라이브의 단일 JSON 파일에 전체 날짜 데이터 보관
+   - 동기화: 로그인 시 pull, 변경 시 debounce push (전체 문서 last-write-wins)
+   - 캘린더: 본인 구글 캘린더를 iframe으로 보기만 (편집은 구글 캘린더로 이동)
    ========================================================================== */
 
-/* 1. 클라우드 설정 정보 로드 및 바인딩 */
+/* 1. 드라이브 동기화 설정(파일 ID) 로드 */
 function initCloudConfig() {
   const saved = localStorage.getItem(CLOUD_CONFIG_KEY);
-  // 구글 연동 완료 시 자동으로 백업이 상시 구동되도록 기본값을 true(참)로 상시 고정
-  cloudConfig.enableGoogleSheets = true;
-  
   if (!saved) return;
-  
   try {
     const parsed = JSON.parse(saved);
-    cloudConfig.spreadsheetId = parsed.spreadsheetId || "";
+    cloudConfig.syncFileId = parsed.syncFileId || "";
   } catch (e) {
     console.error("Cloud config load error:", e);
   }
 }
 
-/* 클라우드 백업 설정 정보 보관 */
+/* 동기화 설정 보관 */
 function saveCloudConfig() {
   localStorage.setItem(CLOUD_CONFIG_KEY, JSON.stringify(cloudConfig));
 }
 
-/* 2. 구글 Identity Services (GIS, 구글 로그인 서비스) 라이브러리 초기화 */
+/* 2. 구글 Identity Services (GIS) 초기화 */
 function initGoogleGIS() {
   if (typeof google === "undefined") {
-    console.warn("구글 GIS 라이브러리가 아직 로드되지 않았사옵니다. 재시도 중...");
     setTimeout(initGoogleGIS, 500);
     return;
   }
-  
+
   try {
     tokenClient = google.accounts.oauth2.initTokenClient({
       client_id: GOOGLE_CLIENT_ID,
-      scope: "https://www.googleapis.com/auth/calendar.readonly https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive.file",
+      scope: GOOGLE_SCOPES,
       callback: (tokenResponse) => {
         if (tokenResponse.error !== undefined) {
-          showToast("❌ 구글 로그인에 실패하였사옵니다.", "error");
+          showToast("구글 로그인에 실패했습니다.", "error");
           return;
         }
         googleAccessToken = tokenResponse.access_token;
         sessionStorage.setItem("google_access_token", googleAccessToken);
-        cloudConfig.enableGoogleSheets = true; // 로그인 성공 시 백업 즉시 활성화
-        saveCloudConfig();
-        showToast("🔑 Google 계정이 성공적으로 연동되었사옵니다!", "success");
-        updateGoogleUI(true);
+        showToast("Google 계정이 연동되었습니다.", "success");
+        onGoogleLinked();
       }
     });
-    
-    // 페이지 구동 시 기존에 들고 있던 토큰이 있다면 세션 복원
+
     if (googleAccessToken) {
-      updateGoogleUI(true);
+      onGoogleLinked();
     } else {
       updateGoogleUI(false);
     }
@@ -487,242 +486,278 @@ function initGoogleGIS() {
   }
 }
 
-/* 구글 로그인 창 호출 */
+/* 로그인 직후: 이메일 조회, 캘린더 임베드, 드라이브에서 데이터 pull */
+async function onGoogleLinked() {
+  updateGoogleUI(true);
+  try {
+    await fetchUserEmail();
+    embedCalendar();
+    await pullFromDrive();
+  } catch (e) {
+    if (e && e.status === 401) {
+      handleAuthExpired();
+    } else {
+      console.error("post-login sync error:", e);
+      showToast("동기화 중 문제가 발생했습니다.", "warning");
+    }
+  }
+}
+
+/* 사용자 이메일 조회 (캘린더 임베드 src로 사용) */
+async function fetchUserEmail() {
+  const res = await fetch("https://www.googleapis.com/oauth2/v3/userinfo", {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (!res.ok) throw { status: res.status };
+  const info = await res.json();
+  userEmail = info.email || null;
+}
+
+/* 본인 구글 캘린더를 iframe으로 임베드 (보기 전용) */
+function embedCalendar() {
+  const frame = document.querySelector("#calendarFrame");
+  if (!frame || !userEmail) return;
+  const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul";
+  frame.src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(userEmail)}`
+    + `&ctz=${encodeURIComponent(tz)}&mode=WEEK&showTitle=0&showPrint=0&showCalendars=0&showTz=0`;
+}
+
+/* 로그인 창 호출 */
 function connectGoogle() {
   if (!tokenClient) {
-    showToast("⚠️ 구글 연동 모듈을 준비 중이옵니다. 잠시 후 시도해 주시옵소서.", "warning");
+    showToast("구글 연동 모듈 준비 중입니다. 잠시 후 다시 시도해 주세요.", "warning");
     return;
   }
   tokenClient.requestAccessToken({ prompt: "consent" });
 }
 
-/* 구글 연동 끊기 */
+/* 연동 해제 */
 function disconnectGoogle() {
-  if (googleAccessToken) {
+  const token = googleAccessToken;
+  googleAccessToken = null;
+  userEmail = null;
+  sessionStorage.removeItem("google_access_token");
+  updateGoogleUI(false);
+  const frame = document.querySelector("#calendarFrame");
+  if (frame) frame.src = "";
+  if (token) {
     try {
-      google.accounts.oauth2.revokeToken(googleAccessToken, () => {
-        googleAccessToken = null;
-        sessionStorage.removeItem("google_access_token");
-        showToast("🔒 구글 계정 연동이 해제되었사옵니다.", "success");
-        updateGoogleUI(false);
+      google.accounts.oauth2.revokeToken(token, () => {
+        showToast("구글 계정 연동이 해제되었습니다.", "success");
       });
     } catch (e) {
-      googleAccessToken = null;
-      sessionStorage.removeItem("google_access_token");
-      updateGoogleUI(false);
+      /* 취소 실패해도 로컬 상태는 이미 초기화됨 */
     }
-  } else {
-    updateGoogleUI(false);
   }
 }
 
-/* 구글 연동 상태에 따른 UI 자동 스위칭 */
+/* 토큰 만료 처리 */
+function handleAuthExpired() {
+  googleAccessToken = null;
+  sessionStorage.removeItem("google_access_token");
+  updateGoogleUI(false);
+  showToast("로그인이 만료되었습니다. 다시 로그인해 주세요.", "warning");
+}
+
+/* 연동 상태에 따른 UI 자동 스위칭 */
 function updateGoogleUI(isLinked) {
   const unlinkedArea = document.querySelector("#calendarUnlinked");
   const linkedArea = document.querySelector("#calendarLinked");
   const statusText = document.querySelector("#calendarStatusText");
-  
+
   if (isLinked) {
     if (unlinkedArea) unlinkedArea.style.display = "none";
     if (linkedArea) linkedArea.style.display = "block";
-    if (statusText) statusText.textContent = "Google 연동 완료 ✨";
+    if (statusText) statusText.textContent = "Google 연동 완료 / 자동 동기화 중";
   } else {
-    if (unlinkedArea) unlinkedArea.style.display = "grid";
-    if (linkedArea) {
-      linkedArea.style.display = "none";
-    }
-    if (statusText) statusText.textContent = "일정 및 클라우드 연동 상태";
+    if (unlinkedArea) unlinkedArea.style.display = "flex";
+    if (linkedArea) linkedArea.style.display = "none";
+    if (statusText) statusText.textContent = "로그인하면 기기 간 자동 동기화됩니다";
   }
 }
 
-/* 4. 구글 스프레드시트 백업 핵심 엔진 */
-async function backupToGoogleSheets(richData) {
-  if (!googleAccessToken) {
-    throw new Error("Google 계정이 아직 연동되지 않았사옵니다.");
-  }
-  
-  let sheetId = cloudConfig.spreadsheetId;
-  
-  // 1단계: 캐싱된 시트 ID가 있는 경우 파일 실존 여부 검증
-  if (sheetId) {
-    try {
-      const verifyResponse = await fetch(`https://www.googleapis.com/drive/v3/files/${sheetId}`, {
-        headers: { "Authorization": `Bearer ${googleAccessToken}` }
-      });
-      if (!verifyResponse.ok) {
-        sheetId = ""; // 유효하지 않은 파일이면 새로 탐색
+/* ---- 드라이브 동기화 핵심 로직 ---- */
+
+/* 로컬의 모든 날짜 데이터를 하나의 페이로드로 수집 */
+function gatherAllLocalData() {
+  const plans = {};
+  for (let i = 0; i < localStorage.length; i++) {
+    const k = localStorage.key(i);
+    if (k && k.startsWith(STORAGE_KEY_PREFIX)) {
+      const date = k.slice(STORAGE_KEY_PREFIX.length);
+      try {
+        plans[date] = JSON.parse(localStorage.getItem(k));
+      } catch {
+        /* 손상된 항목은 건너뜀 */
       }
-    } catch {
-      sheetId = "";
     }
   }
-  
-  // 2단계: 구글 드라이브 내에 "My_DailyPlan_Backup" 이라는 시트가 존재하는지 탐색
-  if (!sheetId) {
-    try {
-      const searchUrl = `https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent("name='My_DailyPlan_Backup' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false")}&fields=files(id)`;
-      const searchResponse = await fetch(searchUrl, {
-        headers: { "Authorization": `Bearer ${googleAccessToken}` }
-      });
-      if (searchResponse.ok) {
-        const searchData = await searchResponse.json();
-        if (searchData.files && searchData.files.length > 0) {
-          sheetId = searchData.files[0].id;
-          cloudConfig.spreadsheetId = sheetId;
-          saveCloudConfig();
-        }
-      }
-    } catch (e) {
-      console.warn("Google Drive search error:", e);
+  const lastModified = Number(localStorage.getItem(LOCAL_MODIFIED_KEY) || Date.now());
+  return { __meta: { lastModified, app: "daily-plan" }, plans };
+}
+
+/* 원격 페이로드를 로컬에 반영 (원격에 있는 날짜 키를 덮어씀) */
+function applyRemoteData(remote) {
+  if (!remote || !remote.plans) return;
+  Object.keys(remote.plans).forEach((date) => {
+    localStorage.setItem(getStorageKeyForDate(date), JSON.stringify(remote.plans[date]));
+  });
+}
+
+/* 동기화 파일 ID 확보 (캐시 검증, 검색, 없으면 생성) */
+async function ensureSyncFile() {
+  if (cloudConfig.syncFileId) {
+    const check = await fetch(`https://www.googleapis.com/drive/v3/files/${cloudConfig.syncFileId}?fields=id,trashed`, {
+      headers: { "Authorization": `Bearer ${googleAccessToken}` }
+    });
+    if (check.status === 401) throw { status: 401 };
+    if (check.ok) {
+      const meta = await check.json();
+      if (!meta.trashed) return cloudConfig.syncFileId;
     }
+    cloudConfig.syncFileId = "";
   }
-  
-  // 3단계: 탐색에 실패했다면 새 스프레드시트를 최초 1회 신규 생성
-  if (!sheetId) {
-    try {
-      const createResponse = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${googleAccessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          properties: { title: "My_DailyPlan_Backup" }
-        })
-      });
-      
-      if (!createResponse.ok) throw new Error("새 스프레드시트 파일 생성에 실패하였습니다.");
-      
-      const newSheetData = await createResponse.json();
-      sheetId = newSheetData.spreadsheetId;
-      cloudConfig.spreadsheetId = sheetId;
+
+  const q = encodeURIComponent(`name='${SYNC_FILE_NAME}' and trashed=false`);
+  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)`, {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (searchRes.status === 401) throw { status: 401 };
+  if (searchRes.ok) {
+    const data = await searchRes.json();
+    if (data.files && data.files.length > 0) {
+      cloudConfig.syncFileId = data.files[0].id;
       saveCloudConfig();
-      
-      // 첫 행에 머리글(열 타이틀) 작성
-      await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
-        method: "POST",
-        headers: {
-          "Authorization": `Bearer ${googleAccessToken}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          values: [
-            ["날짜 (Date)", "오늘의 핵심업무 (Important)", "할 일 목록 (TO DO LIST)", "시간대별 타임라인 (TIME LINE)", "아이디어 메모 (MEMO)", "감사 일기 (THANKS GOD)", "하루 요약 (SUMMARY)"]
-          ]
-        })
-      });
-    } catch (createErr) {
-      console.error("Sheet Create Error:", createErr);
-      throw new Error("새 엑셀 스프레드시트 파일 개설에 실패하였사옵니다.");
+      return cloudConfig.syncFileId;
     }
   }
-  
-  // 4단계: 오늘 하루 일지를 격자 행(Row)에 덧붙이기(Append)
-  const appendResponse = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/Sheet1!A1:append?valueInputOption=USER_ENTERED`, {
+
+  const boundary = "dpsync" + Date.now();
+  const metadata = { name: SYNC_FILE_NAME, mimeType: "application/json" };
+  const initialBody = JSON.stringify(gatherAllLocalData());
+  const multipart =
+    `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
+    JSON.stringify(metadata) +
+    `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
+    initialBody +
+    `\r\n--${boundary}--`;
+
+  const createRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
     method: "POST",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": `multipart/related; boundary=${boundary}`
+    },
+    body: multipart
+  });
+  if (createRes.status === 401) throw { status: 401 };
+  if (!createRes.ok) throw new Error("동기화 파일 생성에 실패했습니다.");
+  const created = await createRes.json();
+  cloudConfig.syncFileId = created.id;
+  saveCloudConfig();
+  return cloudConfig.syncFileId;
+}
+
+/* 드라이브 파일 내용 다운로드 */
+async function downloadSyncContent(fileId) {
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files/${fileId}?alt=media`, {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) return null;
+  try {
+    return await res.json();
+  } catch {
+    return null;
+  }
+}
+
+/* 드라이브 파일 내용 업로드(덮어쓰기) */
+async function uploadSyncContent(fileId, payload) {
+  const res = await fetch(`https://www.googleapis.com/upload/drive/v3/files/${fileId}?uploadType=media`, {
+    method: "PATCH",
     headers: {
       "Authorization": `Bearer ${googleAccessToken}`,
       "Content-Type": "application/json"
     },
-    body: JSON.stringify({
-      values: [
-        [
-          richData.date,
-          richData.importantText,
-          richData.todosText,
-          richData.timelineText,
-          richData.memoText,
-          richData.thanksText,
-          richData.summaryText
-        ]
-      ]
-    })
+    body: JSON.stringify(payload)
   });
-  
-  if (!appendResponse.ok) {
-    throw new Error("데이터 추가(Append) 요청이 실패하였사옵니다.");
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw new Error("동기화 업로드에 실패했습니다.");
+}
+
+/* pull: 원격이 더 최신이면 로컬을 갱신, 아니면 로컬을 push */
+async function pullFromDrive() {
+  if (!googleAccessToken) return;
+  const fileId = await ensureSyncFile();
+  const remote = await downloadSyncContent(fileId);
+  const localMod = Number(localStorage.getItem(LOCAL_MODIFIED_KEY) || 0);
+  const remoteMod = remote && remote.__meta ? Number(remote.__meta.lastModified || 0) : 0;
+
+  if (remote && remoteMod > localMod) {
+    applyRemoteData(remote);
+    localStorage.setItem(LOCAL_MODIFIED_KEY, String(remoteMod));
+    reloadCurrentView();
+    showToast("최신 데이터를 불러왔습니다.", "success");
+  } else {
+    await pushToDrive();
   }
 }
 
-/* 5. 통합 백업 트리거 함수 */
-async function triggerUnifiedBackup() {
-  const triggerBtn = document.querySelector("#triggerCloudBackup");
-  if (triggerBtn) {
-    triggerBtn.disabled = true;
-    const labelEl = triggerBtn.querySelector(".btn-label");
-    if (labelEl) labelEl.textContent = "백업 중...";
+/* push: 로컬 전체 데이터를 드라이브에 업로드 */
+async function pushToDrive() {
+  if (!googleAccessToken) return;
+  const fileId = await ensureSyncFile();
+  await uploadSyncContent(fileId, gatherAllLocalData());
+}
+
+/* 변경 시 디바운스 자동 동기화 (로그인 상태에서만 동작) */
+function scheduleCloudSync() {
+  if (!googleAccessToken) return;
+  window.clearTimeout(cloudSyncTimer);
+  cloudSyncTimer = window.setTimeout(() => {
+    pushToDrive().catch((e) => {
+      if (e && e.status === 401) handleAuthExpired();
+      else console.error("cloud sync error:", e);
+    });
+  }, 2000);
+}
+
+/* pull로 로컬이 갱신된 경우 현재 보고 있는 날짜 화면을 다시 그림 */
+function reloadCurrentView() {
+  loadState();
+  ensureRows("todos", DEFAULT_TODO_ROWS);
+  ensureRows("timeline", DEFAULT_TIMELINE_ROWS);
+  renderList("todos");
+  renderList("timeline");
+  hydrateEditors();
+  hydrateImportantCheckboxes();
+}
+
+/* 헤더의 수동 동기화 버튼 (강제 pull + push) */
+async function manualSync() {
+  if (!googleAccessToken) {
+    showToast("먼저 구글 계정으로 로그인해 주세요.", "warning");
+    return;
   }
-  
+  const btn = document.querySelector("#triggerCloudBackup");
+  const label = btn ? btn.querySelector(".btn-label") : null;
+  if (btn) btn.disabled = true;
+  if (label) label.textContent = "동기화 중...";
   try {
-    const richData = {
-      date: state.planDate,
-      importantText: "",
-      todosText: "",
-      timelineText: "",
-      memoText: stripHtml(state.editors.memo || ""),
-      thanksText: stripHtml(state.editors.thanks || ""),
-      summaryText: stripHtml(state.editors.summary || "")
-    };
-    
-    // 중요 업무 3가지 텍스트 조합
-    const imp1 = stripHtml(state.editors.important1 || "");
-    const imp2 = stripHtml(state.editors.important2 || "");
-    const imp3 = stripHtml(state.editors.important3 || "");
-    const done = state.importantDone || {};
-    
-    const imp1Str = imp1 ? `${done.important1 ? "[완료]" : "[대기]"} ${imp1}` : "";
-    const imp2Str = imp2 ? `${done.important2 ? "[완료]" : "[대기]"} ${imp2}` : "";
-    const imp3Str = imp3 ? `${done.important3 ? "[완료]" : "[대기]"} ${imp3}` : "";
-    richData.importantText = [imp1Str, imp2Str, imp3Str].filter(Boolean).join("\n");
-    
-    // 할 일 목록 (TO DO LIST) 무손실 압축 포맷화
-    if (state.todos && state.todos.length > 0) {
-      const todoRows = state.todos.map((item, index) => {
-        if (!item.task || !item.task.trim()) return null;
-        let rowStr = `${index + 1}. [ ] ${item.task.trim()}`;
-        if (item.start || item.end) {
-          rowStr += ` (기한: ${item.start || "미지정"} ~ ${item.end || "미지정"})`;
-        }
-        return rowStr;
-      }).filter(Boolean);
-      richData.todosText = todoRows.join("\n");
-    }
-    
-    // 시간 순서별 실행 기록 (TIME LINE) 무손실 압축 포맷화
-    if (state.timeline && state.timeline.length > 0) {
-      const timelineRows = state.timeline.map((item, index) => {
-        if (!item.task || !item.task.trim()) return null;
-        let rowStr = `${index + 1}. [${item.start ? item.start.replace("T", " ") : "시작 미지정"} ~ ${item.end ? item.end.replace("T", " ") : "마침 미지정"}] ${item.task.trim()}`;
-        return rowStr;
-      }).filter(Boolean);
-      richData.timelineText = timelineRows.join("\n");
-    }
-    
-    // 구글 스프레드시트 백업 실행
-    await backupToGoogleSheets(richData);
-    showToast("📥 구글 스프레드시트 백업 성공!", "success");
-  } catch (error) {
-    showToast(`❌ 백업 실패: ${error.message}`, "error");
-    console.error("Backup error:", error);
+    await pullFromDrive();
+    showToast("동기화 완료", "success");
+  } catch (e) {
+    if (e && e.status === 401) handleAuthExpired();
+    else showToast(`동기화 실패: ${e.message || "오류"}`, "error");
   } finally {
-    if (triggerBtn) {
-      triggerBtn.disabled = false;
-      const labelEl = triggerBtn.querySelector(".btn-label");
-      if (labelEl) labelEl.textContent = "통합 백업 전송";
-    }
+    if (btn) btn.disabled = false;
+    if (label) label.textContent = "동기화";
   }
 }
 
-/* 6. HTML 태그를 날려 일반 텍스트만 추출하는 기법 */
-function stripHtml(html) {
-  const tmp = document.createElement("DIV");
-  tmp.innerHTML = html;
-  return tmp.textContent || tmp.innerText || "";
-}
-
-/* 7. 고품격 사용자 피드백 미니 토스트 알림창 */
+/* 사용자 피드백 미니 토스트 알림창 */
 function showToast(message, type = "success") {
-  // 기존 토스트 컨테이너 탐색 또는 생성
   let toast = document.querySelector("#appToastContainer");
   if (!toast) {
     toast = document.createElement("div");
@@ -730,16 +765,15 @@ function showToast(message, type = "success") {
     toast.className = "toast-container";
     document.body.appendChild(toast);
   }
-  
+
   let icon = "🔔";
   if (type === "success") icon = "🟢";
   else if (type === "error") icon = "🔴";
   else if (type === "warning") icon = "🟡";
-  
+
   toast.innerHTML = `<span class="toast-icon">${icon}</span><span class="toast-msg">${message}</span>`;
   toast.classList.add("show");
-  
-  // 3.5초 뒤 토스트 서서히 소멸
+
   setTimeout(() => {
     toast.classList.remove("show");
   }, 3500);
