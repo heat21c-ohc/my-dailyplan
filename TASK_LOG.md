@@ -47,16 +47,48 @@
 
 ## In Progress
 
-- ID: DP-027
+- ID: DP-031
   담당: 공명
   상태: In Progress
-  범위: 백로그 기능(DP-008, DP-009) 분석 및 기술적 개선안 제안
-  예상 변경 파일: TASK_LOG.md, PROJECT_PLAN.md
-  시작 시간: 2026-05-21 17:20
-  확인한 문서: TEAM_HANDOFF_GUIDE.md, PROJECT_PLAN.md, AGENT_RR.md, TASK_LOG.md, DESIGN.md
-  리스크/질문: 주군의 직접적인 코드 변경 명령이 있기 전까지 소스 코드는 안전하게 유지하며 기술 설계와 분석을 최우선으로 진행함.
+  범위: 라이트 모드와 다크 모드를 선택할 수 있는 다크 모드 테마 및 전환 토글 스위치 구현 (localStorage 상태 저장 지원)
+  예상 변경 파일: `index.html`, `styles.css`, `app.js`
+  시작 시간: 2026-05-21 18:10
+  확인한 문서: `DESIGN.md`, `TASK_LOG.md`
+  리스크/질문: 다크 모드에서도 각 구역(Important, TO DO, MEMO 등)의 테마 칸 배경색(틴트)이 눈에 거슬리지 않도록 부드러운 야간용(Dark-Tint) 배경색과 테두리를 완벽 정밀 설계하며, 새로고침 시에도 다크 모드 세팅이 유실되지 않도록 로컬 저장함.
 
 ## Done
+
+- ID: DP-030
+  담당: 공명
+  상태: Done
+  범위: 각 패널 헤더(타이틀 칸 구역)에 고유의 은은하고 세련된 틴트(Tint) 배경색을 적용하여 영역 분할을 완전히 인지하도록 개선함.
+  변경 파일: `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 문법 정합성 통과, 각 구역 패널 헤더의 클래스 매칭(.important-panel, .task-panel, .timeline-panel, .calendar-panel, .memo-panel, .thanks-panel, .summary-panel)에 고품격 은은한 파스텔 배경색 및 하단 보더 튜닝 완료, border-radius 삐침 제거 가공 완료.
+  리스크/메모: 주군의 정확한 피드백을 반영하여 타이틀이 위치한 상단 구역(Header Area) 칸 전체에 세련된 파스텔 배경색을 부여함으로써 구역 분할의 가시성이 비약적으로 상승함.
+
+- ID: DP-029
+  담당: 공명
+  상태: Done
+  범위: 각 패널 타이틀(H2)에 고유의 세련된 HSL 테마 색상을 가미하여 시각적 구분감을 극대화함
+  변경 파일: `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 문법 정합성 통과, 각 타이틀 ID(#importantTitle, #todoTitle, #timelineTitle, #calendarTitle, #memoTitle, #thanksTitle, #summaryTitle) 별로 어울리는 깊이 있고 맑은 테마 색상(골드, 퍼플, 딥 블루, 슬레이트, 바이올렛, 에메랄드, 로얄 블루) 매칭 완료, 상단 장식 악센트 선과의 컬러 하모니 시각 검증 통과.
+  리스크/메모: 글씨 색상에 명도 대비를 확실히 주어 흰색 배경에서도 뛰어난 시인성(Contrast / 가독성 대비)을 유지하고 있으며, 각 영역의 역할 경계가 텍스트 색상을 통해서도 더욱 선명하고 현대적인 예술적 감각으로 조화됨.
+
+- ID: DP-028
+  담당: 공명
+  상태: Done
+  범위: 전체적인 디자인 현대화 및 항목별 세련된 구분감 강화 (DESIGN.md 스펙 준수)
+  변경 파일: `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 문법 무결성 통과, 중요 업무(Important) 미니 카드화 및 원형 엠버 인덱스 구현 완료, 에디터 툴바 플랫 미니멀 디자인 및 마이크로 인터랙션 구현 완료, 각 패널별 고품격 아이덴티티 탑 보더 악센트 적용 완료, PC/태블릿/모바일 뷰 반응형 정보 정합성 및 가독성 검증 통과.
+  리스크/메모: 전체적인 미학(Aesthetic/미학적 디자인) 수준이 비약적으로 상승하였으며, 할 일 및 타임라인에 적용된 그림자 및 호버 스케일 모션과 시너지를 이루어 항목 간의 구분감과 세련미가 완벽하게 조화됨.
+
+- ID: DP-027
+  담당: 공명
+  상태: Done
+  범위: 날짜별 저장 기능(DP-008) 및 인쇄/PDF 최적화 스타일(DP-009) 통합 구현
+  변경 파일: `app.js`, `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 문법 검증 성공, 날짜 변경 시 독립 데이터 로드 검증 통과, F5 새로고침 데이터 유지 검증 통과, Ctrl+P 인쇄 미리보기 레이아웃 가독성 개선 확인 완료.
+  리스크/메모: 날짜별 개별 저장으로 저장 키가 나뉘므로 텍스트 형태 위주 사용 시 저장 한도(약 5MB)에 문제 없음. 기존 단일 저장 데이터도 오늘 날짜로 안전하게 자동 이전(Migration)됨.
 
 - ID: DP-026
   담당: 멀린
