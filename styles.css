@@ -100,6 +100,55 @@ textarea {
   padding: 0 12px;
 }
 
+.header-controls .header-logout-button.google-logout-button {
+  gap: 6px;
+  border: 1px solid var(--line-soft) !important;
+  border-radius: var(--radius);
+  background: var(--panel) !important;
+  color: var(--muted) !important;
+  font-family: 'Outfit', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.header-controls .header-logout-button.google-logout-button::before {
+  color: var(--muted);
+  content: "↪";
+  font-size: 13px;
+  line-height: 1;
+}
+
+.header-controls .header-logout-button.google-logout-button:hover {
+  border-color: var(--accent) !important;
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(79, 70, 229, 0.04)) !important;
+  color: var(--accent) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.08);
+}
+
+.header-controls .header-logout-button.google-logout-button:hover::before {
+  color: var(--accent);
+}
+
+.header-controls .header-logout-button.google-logout-button:active {
+  transform: translateY(0) scale(0.97);
+}
+
+body.dark-mode .header-controls .header-logout-button.google-logout-button {
+  background: var(--panel) !important;
+  border-color: var(--line-soft) !important;
+  color: var(--text) !important;
+}
+
+body.dark-mode .header-controls .header-logout-button.google-logout-button:hover {
+  border-color: var(--accent) !important;
+  background: linear-gradient(135deg, rgba(165, 180, 252, 0.06), rgba(99, 102, 241, 0.06)) !important;
+  color: #a5b4fc !important;
+}
+
 .backup-trigger-btn {
   display: inline-flex;
   align-items: center;
