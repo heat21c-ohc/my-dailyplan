@@ -1608,17 +1608,19 @@ input:checked + .slider:before {
   align-items: center;
   justify-content: center;
   gap: 8px;
-  width: 100%;
-  height: 44px;
+  width: auto;
+  height: 46px;
+  padding: 0 18px;
   border: none;
   border-radius: var(--radius);
   background: linear-gradient(135deg, #6366f1, #4f46e5);
   color: #ffffff;
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 700;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
   transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
 }
 
 .backup-trigger-btn:hover {
@@ -1628,11 +1630,11 @@ input:checked + .slider:before {
 }
 
 .backup-trigger-btn:active {
-  transform: translateY(0);
+  transform: translateY(0) scale(0.96);
 }
 
 .backup-trigger-btn .btn-icon {
-  font-size: 16px;
+  font-size: 15px;
 }
 
 /* 미니 알림 토스트 (Toast Message) */
