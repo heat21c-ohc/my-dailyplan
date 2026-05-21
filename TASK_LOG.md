@@ -29,6 +29,14 @@
 
 ## Backlog
 
+- ID: DP-041
+  담당: 미배정
+  상태: Backlog
+  범위: Archive 검색 화면 추가
+  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
+  검증: 상단 Archive 버튼 클릭 시 검색 모달이 열리고, 날짜/섹션/키워드 검색 결과 클릭 시 해당 날짜 Daily Plan으로 이동하는지 확인
+  리스크/메모: 별도 앱/서버를 만들지 않고 현재 웹페이지 내부 전체 화면 모달로 구현. 데이터는 날짜별 localStorage 및 Google Drive JSON 동기화 데이터를 읽어 검색.
+
 - ID: DP-034
   담당: 미배정
   상태: Backlog
@@ -42,6 +50,14 @@
 (현재 진행 중인 작업 없음 - DP-036 완료)
 
 ## Done
+
+- ID: DP-042
+  담당: 멀린
+  상태: Done
+  범위: 작업 마무리 및 다른 PC 인수인계 기록
+  변경 파일: `TASK_LOG.md`
+  검증: `git status --short` 변경 파일이 `TASK_LOG.md`뿐임을 확인, `node --check app.js` 통과, GitHub 백업 커밋/푸시 예정
+  리스크/메모: 현재 배포 URL은 `https://heat21c-ohc.github.io/my-dailyplan/`. 다른 PC에서는 GitHub 저장소를 clone/pull 후 `TEAM_HANDOFF_GUIDE.md`와 `TASK_LOG.md`를 먼저 확인하고 이어서 작업.
 
 - ID: DP-040
   담당: 멀린
