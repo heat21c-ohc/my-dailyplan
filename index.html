@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Daily Plan</title>
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <main class="app-shell">
+      <header class="app-header">
+        <div>
+          <p class="eyebrow">Daily productivity planner</p>
+          <h1>Daily Plan</h1>
+        </div>
+        <label class="date-field">
+          <span>DATE</span>
+          <input id="planDate" type="date" />
+        </label>
+      </header>
+
+      <section class="planner-grid" aria-label="Daily planning workspace">
+        <section class="main-grid" aria-label="Primary planning area">
+          <section class="left-stack">
+            <section class="panel important-panel priority-panel" aria-labelledby="importantTitle">
+              <div class="panel-header">
+                <div>
+                  <h2 id="importantTitle">Important</h2>
+                  <p>오늘 반드시 집중할 핵심 3가지</p>
+                </div>
+              </div>
+              <div class="important-list">
+                <div class="important-item">
+                  <span>1</span>
+                  <div class="rich-editor" contenteditable="true" data-editor="important1" aria-label="중요한 일 1"></div>
+                </div>
+                <div class="important-item">
+                  <span>2</span>
+                  <div class="rich-editor" contenteditable="true" data-editor="important2" aria-label="중요한 일 2"></div>
+                </div>
+                <div class="important-item">
+                  <span>3</span>
+                  <div class="rich-editor" contenteditable="true" data-editor="important3" aria-label="중요한 일 3"></div>
+                </div>
+              </div>
+            </section>
+
+            <section class="work-grid" aria-label="Execution workspace">
+              <section class="panel task-panel" aria-labelledby="todoTitle">
+                <div class="panel-header">
+                  <div>
+                    <h2 id="todoTitle">TO DO LIST</h2>
+                    <p>오늘 처리할 업무</p>
+                  </div>
+                  <button class="icon-button" id="addTodo" type="button" title="할 일 추가" aria-label="할 일 추가">+</button>
+                </div>
+                <div id="todoList" class="row-list" data-list="todos"></div>
+              </section>
+
+              <section class="panel timeline-panel" aria-labelledby="timelineTitle">
+                <div class="panel-header">
+                  <div>
+                    <h2 id="timelineTitle">TIME LINE</h2>
+                    <p>시간 순서별 실행 기록</p>
+                  </div>
+                  <button class="icon-button" id="addTimeline" type="button" title="타임라인 추가" aria-label="타임라인 추가">+</button>
+                </div>
+                <div id="timelineList" class="row-list" data-list="timeline"></div>
+              </section>
+            </section>
+          </section>
+
+          <section class="right-stack">
+            <section class="panel calendar-panel" aria-labelledby="calendarTitle">
+              <div class="panel-header">
+                <div>
+                  <h2 id="calendarTitle">Google Calendar</h2>
+                  <p>연동 예정 영역</p>
+                </div>
+              </div>
+              <div class="calendar-preview">
+                <div class="calendar-empty">
+                  <strong>Calendar integration pending</strong>
+                  <span>나중에 Google OAuth 설정 후 오늘 일정이 표시될 자리입니다.</span>
+                </div>
+              </div>
+            </section>
+
+            <section class="panel memo-panel" aria-labelledby="memoTitle">
+              <div class="panel-header">
+                <div>
+                  <h2 id="memoTitle">MEMO</h2>
+                  <p>아이디어와 메모</p>
+                </div>
+              </div>
+              <div class="editor-toolbar" data-toolbar>
+                <button type="button" data-command="bold" title="굵게">B</button>
+                <button type="button" data-command="italic" title="기울임">I</button>
+                <button type="button" data-command="underline" title="밑줄">U</button>
+                <button type="button" data-command="insertUnorderedList" title="목록">•</button>
+              </div>
+              <div class="rich-editor large-editor" contenteditable="true" data-editor="memo" aria-label="메모"></div>
+            </section>
+
+            <section class="review-grid" aria-label="Daily review">
+              <section class="panel thanks-panel" aria-labelledby="thanksTitle">
+                <div class="panel-header">
+                  <div>
+                    <h2 id="thanksTitle">THANKS GOD</h2>
+                    <p>감사 기록</p>
+                  </div>
+                </div>
+                <div class="editor-toolbar" data-toolbar>
+                  <button type="button" data-command="bold" title="굵게">B</button>
+                  <button type="button" data-command="italic" title="기울임">I</button>
+                  <button type="button" data-command="underline" title="밑줄">U</button>
+                  <button type="button" data-command="insertUnorderedList" title="목록">•</button>
+                </div>
+                <div class="rich-editor review-editor" contenteditable="true" data-editor="thanks" aria-label="감사한 내용"></div>
+              </section>
+
+              <section class="panel summary-panel" aria-labelledby="summaryTitle">
+                <div class="panel-header">
+                  <div>
+                    <h2 id="summaryTitle">SUMMARY</h2>
+                    <p>하루 요약</p>
+                  </div>
+                </div>
+                <div class="editor-toolbar" data-toolbar>
+                  <button type="button" data-command="bold" title="굵게">B</button>
+                  <button type="button" data-command="italic" title="기울임">I</button>
+                  <button type="button" data-command="underline" title="밑줄">U</button>
+                  <button type="button" data-command="insertUnorderedList" title="목록">•</button>
+                </div>
+                <div class="rich-editor review-editor" contenteditable="true" data-editor="summary" aria-label="하루 요약"></div>
+              </section>
+            </section>
+          </section>
+        </section>
+      </section>
+    </main>
+
+    <template id="todoTemplate">
+      <article class="plan-row" data-row>
+        <button class="drag-handle" type="button" title="순서 이동" aria-label="순서 이동">≡</button>
+        <textarea class="title-input" data-field="task" placeholder="업무 입력" rows="1"></textarea>
+        <div class="date-control" data-label="시작">
+          <span class="control-label">시작</span>
+          <input type="date" data-field="start" aria-label="시작 날짜" />
+          <button class="clear-button" type="button" data-clear="start" title="시작 날짜 삭제" aria-label="시작 날짜 삭제">×</button>
+        </div>
+        <div class="date-control" data-label="완료">
+          <span class="control-label">완료</span>
+          <input type="date" data-field="end" aria-label="완료 날짜" />
+          <button class="clear-button" type="button" data-clear="end" title="완료 날짜 삭제" aria-label="완료 날짜 삭제">×</button>
+        </div>
+        <button class="delete-button" type="button" data-delete title="행 삭제" aria-label="행 삭제">×</button>
+      </article>
+    </template>
+
+    <template id="timelineTemplate">
+      <article class="plan-row" data-row>
+        <button class="drag-handle" type="button" title="순서 이동" aria-label="순서 이동">≡</button>
+        <textarea class="title-input" data-field="task" placeholder="일정 입력" rows="1"></textarea>
+        <div class="date-control" data-label="시작시간">
+          <span class="control-label">시작</span>
+          <input type="datetime-local" data-field="start" aria-label="시작 시간" />
+          <button class="clear-button" type="button" data-clear="start" title="시작 시간 삭제" aria-label="시작 시간 삭제">×</button>
+        </div>
+        <div class="date-control" data-label="마침시간">
+          <span class="control-label">마침</span>
+          <input type="datetime-local" data-field="end" aria-label="마침 시간" />
+          <button class="clear-button" type="button" data-clear="end" title="마침 시간 삭제" aria-label="마침 시간 삭제">×</button>
+        </div>
+        <button class="delete-button" type="button" data-delete title="행 삭제" aria-label="행 삭제">×</button>
+      </article>
+    </template>
+
+    <script src="app.js"></script>
+  </body>
+</html>
