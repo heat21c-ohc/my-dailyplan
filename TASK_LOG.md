@@ -29,14 +29,6 @@
 
 ## Backlog
 
-- ID: DP-041
-  담당: 미배정
-  상태: Backlog
-  범위: Archive 검색 화면 추가
-  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
-  검증: 상단 Archive 버튼 클릭 시 검색 모달이 열리고, 날짜/섹션/키워드 검색 결과 클릭 시 해당 날짜 Daily Plan으로 이동하는지 확인
-  리스크/메모: 별도 앱/서버를 만들지 않고 현재 웹페이지 내부 전체 화면 모달로 구현. 데이터는 날짜별 localStorage 및 Google Drive JSON 동기화 데이터를 읽어 검색.
-
 - ID: DP-034
   담당: 미배정
   상태: Backlog
@@ -47,9 +39,71 @@
 
 ## In Progress
 
-(현재 진행 중인 작업 없음 - DP-036 완료)
+- ID: DP-043
+  담당: 멀린
+  상태: In Progress
+  범위: TEAM_HANDOFF_GUIDE.md 확인 및 다음 작업 시작 준비
+  변경 파일: `TASK_LOG.md`
+  검증 예정: 실제 작업 완료 후 변경 파일과 검증 결과를 `TASK_LOG.md`에 기록
+  리스크/메모: 아직 보스가 구체적인 구현 작업을 지시하지 않아 시작 기록만 남김.
 
 ## Done
+
+- ID: DP-049
+  담당: 멀린
+  상태: Done
+  범위: Daily Plan 앱에 Notion Worker 연결 UI 및 백업 호출 로직 추가
+  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `node --check worker/notion-backup-worker.js` 통과, Notion 연결/백업 버튼 및 Worker API 호출 코드 확인
+  리스크/메모: 실제 동작은 Cloudflare Worker에 서버 코드 배포, 환경 변수, KV 바인딩, Notion Redirect URI 설정 후 확인 가능. Notion Page ID는 사용자가 백업용 Notion 페이지를 만든 뒤 입력해야 함.
+
+- ID: DP-048
+  담당: 멀린
+  상태: Done
+  범위: Cloudflare Workers 기반 Notion 백업 서버 초안 작성
+  변경 파일: `worker/notion-backup-worker.js`, `worker/README.md`, `TASK_LOG.md`
+  검증: 서버 코드는 비밀키를 포함하지 않도록 작성, Notion OAuth start/callback 및 `/backup/notion` API 초안 구성
+  리스크/메모: 실제 동작 전 Cloudflare Worker 환경 변수, KV 바인딩, Notion Redirect URI 설정 필요. 사용자가 전달한 Notion secret은 노출 위험이 있으므로 Cloudflare 설정 후 재발급/교체 권장.
+
+- ID: DP-047
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets 백업 행 구조를 날짜별 1행으로 재정리
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `buildDailyArchiveRows`, `buildTodoBackupCell`, `buildTimelineBackupCell` 확인
+  리스크/메모: Google Sheets는 백업 날짜/계획 날짜 기준 1행으로 저장. TO DO LIST는 `내용/시작/완료`, TIME LINE은 `내용/시작/마침` 라벨을 각 항목에 붙여 셀 내부에서 구분되도록 변경.
+
+- ID: DP-046
+  담당: 멀린
+  상태: Done
+  범위: 백업 선택 UI 및 완료 항목 중심 백업 규칙 반영
+  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, 백업 규칙 함수(`backupCurrentPlanToSheets`, `buildCompletedArchiveRows`, `clearBackedUpCompletedItems`, `scheduleDailySheetsBackup`) 확인
+  리스크/메모: Google Sheets는 항목별 행 저장으로 변경. TO DO/TIME LINE은 완료 날짜 또는 마침 시간이 있는 항목만 백업 후 화면에서 제거하고 남은 항목을 위로 정리. Important는 체크 완료 항목만 백업 후 비움. MEMO/THANKS GOD/SUMMARY는 백업 날짜 기준으로 저장 후 비움. 자동 백업은 브라우저가 열려 있고 Google 로그인 토큰이 있을 때 23:59에 실행 가능.
+
+- ID: DP-045
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets / Notion 선택형 백업 기능 추가
+  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, 변경 파일 `app.js`, `index.html`, `styles.css`, `TASK_LOG.md` 확인
+  리스크/메모: Google Sheets 백업은 `Daily Plan Archive` 스프레드시트를 만들고 날짜별 기록을 한 행씩 저장/갱신하도록 구현. Notion은 사용자별 OAuth 서버가 필요하므로 이번 단계에서는 선택 UI와 서버 필요 안내까지만 구현. Google Cloud에서 Sheets API 및 OAuth 스코프 설정 확인 필요.
+
+- ID: DP-044
+  담당: 멀린
+  상태: Done
+  범위: 백업 기능 개선 방향 검토 및 제안
+  변경 파일: `TASK_LOG.md`
+  검증: `app.js`, `index.html`, `TASK_LOG.md`의 현재 백업/동기화 구조 확인, `node --check app.js` 통과
+  리스크/메모: 현재 백업은 사용자 Google Drive의 `my_dailyplan_sync.json` 단일 파일에 전체 날짜 데이터를 저장하는 구조. 자동 동기화는 검증 완료되었으므로 다음 개선은 수동 내보내기/복원, 백업 이력, 복구 안전장치 중 우선순위 선택 필요.
+
+- ID: DP-041
+  담당: 멀린
+  상태: Done
+  범위: Archive 검색 화면 추가
+  변경 파일: `index.html`, `styles.css`, `app.js`, `TASK_LOG.md`
+  검증: 상단 Archive 버튼 및 전체 화면 검색 모달 추가, 날짜/섹션/키워드 검색 로직 구현, 검색 결과 클릭 시 해당 날짜 Daily Plan으로 이동하는 흐름 구현, `node --check app.js` 통과
+  리스크/메모: 자동 브라우저 클릭 검증은 로컬 Playwright 미설치로 수행하지 못함. Google Drive 원격 데이터는 로그인 후 pull되어 localStorage에 반영된 기록을 기준으로 검색한다.
 
 - ID: DP-042
   담당: 멀린

@@ -3,21 +3,38 @@ const LEGACY_STORAGE_KEY = "daily-plan-state-v1";
 const THEME_STORAGE_KEY = "daily-plan-theme"; /* 사용자 테마 설정 저장용 키 */
 const CLOUD_CONFIG_KEY = "daily-plan-cloud-config"; /* 드라이브 동기화 파일 ID 캐싱용 키 */
 const LOCAL_MODIFIED_KEY = "daily-plan-last-modified"; /* 마지막 수정 시각(ms) - 기기 간 충돌 판별용 */
+const AUTO_SHEETS_BACKUP_KEY = "daily-plan-last-auto-sheets-backup";
 const SYNC_FILE_NAME = "my_dailyplan_sync.json"; /* 사용자 드라이브에 저장되는 동기화 파일명 */
 const GOOGLE_CLIENT_ID = "552800594246-klpv3sg3m7tp72r633kuhkeg945ell20.apps.googleusercontent.com"; /* 주군의 Google Client ID */
-const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file"; /* 비민감 권한만 사용, 구글 검증 불필요 */
+const ARCHIVE_SHEET_NAME = "Daily Plan Archive";
+const ARCHIVE_SHEET_TAB = "Daily Plan";
+const BACKUP_WORKER_BASE_URL = "https://daily-plan-backup-api.heat21c.workers.dev";
+const NOTION_USER_ID_KEY = "daily-plan-notion-user-id";
+const NOTION_USER_SECRET_KEY = "daily-plan-notion-user-secret";
+const NOTION_PARENT_PAGE_ID_KEY = "daily-plan-notion-parent-page-id";
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets"; /* Drive sync + Sheets archive */
 const DEFAULT_TODO_ROWS = 6;
 const DEFAULT_TIMELINE_ROWS = 6;
+const ARCHIVE_SECTION_LABELS = {
+  important: "Important",
+  todos: "TO DO LIST",
+  timeline: "TIME LINE",
+  memo: "MEMO",
+  thanks: "THANKS GOD",
+  summary: "SUMMARY"
+};
 
 // 구글 API 연동 런타임 변수
 let googleAccessToken = sessionStorage.getItem("google_access_token") || null;
 let tokenClient = null;
 let userEmail = null; /* 로그인 사용자 이메일 (캘린더 임베드 src용) */
 let cloudSyncTimer = 0; /* 드라이브 자동 동기화 디바운스 타이머 */
+let autoSheetsBackupTimer = 0;
 
 // 드라이브 동기화 설정 (앱이 생성한 동기화 파일 ID 캐싱)
 const cloudConfig = {
-  syncFileId: ""
+  syncFileId: "",
+  archiveSheetId: ""
 };
 
 const state = {
@@ -64,6 +81,7 @@ const lists = {
 
 let activeEditor = null;
 let saveTimer = 0;
+let archiveSearchTimer = 0;
 
 init();
 
@@ -81,6 +99,7 @@ function init() {
   hydrateImportantCheckboxes();
   bindPageEvents();
   initGoogleGIS();
+  scheduleDailySheetsBackup();
 }
 
 /* 테마 초기화 기능 (로컬 저장소 상태 복원) */
@@ -196,6 +215,9 @@ function bindPageEvents() {
   if (syncBtn) {
     syncBtn.addEventListener("click", manualSync);
   }
+
+  bindBackupEvents();
+  bindArchiveEvents();
 }
 
 function loadState() {
@@ -428,6 +450,314 @@ function hydrateImportantCheckboxes() {
   });
 }
 
+function bindBackupEvents() {
+  const openBtn = document.querySelector("#openBackupPanel");
+  const closeBtn = document.querySelector("#closeBackupPanel");
+  const modal = document.querySelector("#backupModal");
+  const sheetsBtn = document.querySelector("#backupToSheets");
+  const openSheetBtn = document.querySelector("#openArchiveSheet");
+  const notionConnectBtn = document.querySelector("#connectNotionBackup");
+  const notionBackupBtn = document.querySelector("#backupToNotion");
+  const notionPageInput = document.querySelector("#notionParentPageId");
+
+  if (!openBtn || !modal) return;
+
+  openBtn.addEventListener("click", openBackupPanel);
+  if (closeBtn) closeBtn.addEventListener("click", closeBackupPanel);
+
+  modal.querySelectorAll("[data-backup-close]").forEach((el) => {
+    el.addEventListener("click", closeBackupPanel);
+  });
+
+  if (sheetsBtn) sheetsBtn.addEventListener("click", () => backupCurrentPlanToSheets({ auto: false }));
+  if (openSheetBtn) openSheetBtn.addEventListener("click", openArchiveSheet);
+  if (notionConnectBtn) notionConnectBtn.addEventListener("click", connectNotionBackup);
+  if (notionBackupBtn) notionBackupBtn.addEventListener("click", backupCurrentPlanToNotion);
+  if (notionPageInput) {
+    notionPageInput.value = localStorage.getItem(NOTION_PARENT_PAGE_ID_KEY) || "";
+    notionPageInput.addEventListener("input", () => {
+      localStorage.setItem(NOTION_PARENT_PAGE_ID_KEY, notionPageInput.value.trim());
+    });
+  }
+}
+
+function openBackupPanel() {
+  const modal = document.querySelector("#backupModal");
+  if (!modal) return;
+  modal.hidden = false;
+  document.body.classList.add("backup-open");
+  updateBackupStatus();
+}
+
+function closeBackupPanel() {
+  const modal = document.querySelector("#backupModal");
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.classList.remove("backup-open");
+}
+
+function updateBackupStatus(message) {
+  const status = document.querySelector("#backupStatusText");
+  const openSheetBtn = document.querySelector("#openArchiveSheet");
+  if (status) {
+    status.textContent = message || (cloudConfig.archiveSheetId
+      ? "Google Sheets archive is connected."
+      : "Google Sheets archive will be created on first backup.");
+  }
+  if (openSheetBtn) openSheetBtn.disabled = !cloudConfig.archiveSheetId;
+  updateNotionBackupStatus();
+}
+
+function updateNotionBackupStatus(message) {
+  const status = document.querySelector("#notionBackupStatusText");
+  const backupBtn = document.querySelector("#backupToNotion");
+  const pageId = getNotionParentPageId();
+  const connected = !!localStorage.getItem(NOTION_USER_ID_KEY) && !!localStorage.getItem(NOTION_USER_SECRET_KEY);
+
+  if (status) {
+    status.textContent = message || (connected
+      ? "Notion 연결 정보가 이 브라우저에 저장되어 있습니다."
+      : "Notion 백업은 먼저 Notion 페이지 ID 입력 후 연결해야 합니다.");
+  }
+  if (backupBtn) backupBtn.disabled = !connected || !pageId;
+}
+
+function bindArchiveEvents() {
+  const openBtn = document.querySelector("#openArchiveSearch");
+  const closeBtn = document.querySelector("#closeArchiveSearch");
+  const modal = document.querySelector("#archiveModal");
+  const dateInput = document.querySelector("#archiveDateFilter");
+  const sectionSelect = document.querySelector("#archiveSectionFilter");
+  const keywordInput = document.querySelector("#archiveKeyword");
+  const clearBtn = document.querySelector("#clearArchiveSearch");
+
+  if (!openBtn || !modal) return;
+
+  openBtn.addEventListener("click", openArchiveSearch);
+  if (closeBtn) closeBtn.addEventListener("click", closeArchiveSearch);
+
+  modal.querySelectorAll("[data-archive-close]").forEach((el) => {
+    el.addEventListener("click", closeArchiveSearch);
+  });
+
+  [dateInput, sectionSelect, keywordInput].forEach((input) => {
+    if (!input) return;
+    input.addEventListener("input", scheduleArchiveSearch);
+    input.addEventListener("change", scheduleArchiveSearch);
+  });
+
+  if (clearBtn) {
+    clearBtn.addEventListener("click", () => {
+      if (dateInput) dateInput.value = "";
+      if (sectionSelect) sectionSelect.value = "all";
+      if (keywordInput) keywordInput.value = "";
+      renderArchiveResults();
+      if (keywordInput) keywordInput.focus();
+    });
+  }
+
+  document.addEventListener("keydown", (event) => {
+    if (event.key === "Escape" && !modal.hidden) closeArchiveSearch();
+  });
+}
+
+async function openArchiveSearch() {
+  const modal = document.querySelector("#archiveModal");
+  const keywordInput = document.querySelector("#archiveKeyword");
+  if (!modal) return;
+
+  saveState();
+  modal.hidden = false;
+  document.body.classList.add("archive-open");
+  renderArchiveLoading();
+
+  if (googleAccessToken) {
+    try {
+      await pullFromDrive();
+    } catch (e) {
+      if (e && e.status === 401) handleAuthExpired();
+      else showToast(`Archive 최신 동기화 실패: ${e.message || "오류"}`, "warning");
+    }
+  }
+
+  renderArchiveResults();
+  if (keywordInput) keywordInput.focus();
+}
+
+function closeArchiveSearch() {
+  const modal = document.querySelector("#archiveModal");
+  if (!modal) return;
+  modal.hidden = true;
+  document.body.classList.remove("archive-open");
+}
+
+function scheduleArchiveSearch() {
+  window.clearTimeout(archiveSearchTimer);
+  archiveSearchTimer = window.setTimeout(renderArchiveResults, 120);
+}
+
+function renderArchiveLoading() {
+  const meta = document.querySelector("#archiveResultMeta");
+  const results = document.querySelector("#archiveResults");
+  if (meta) meta.textContent = "저장된 기록을 불러오는 중입니다.";
+  if (results) results.replaceChildren();
+}
+
+function renderArchiveResults() {
+  const meta = document.querySelector("#archiveResultMeta");
+  const results = document.querySelector("#archiveResults");
+  if (!meta || !results) return;
+
+  const matches = searchArchivePlans();
+  results.replaceChildren();
+
+  if (!matches.length) {
+    meta.textContent = "검색 결과 0건";
+    const empty = document.createElement("div");
+    empty.className = "archive-empty";
+    empty.textContent = "조건에 맞는 저장 기록이 없습니다.";
+    results.appendChild(empty);
+    return;
+  }
+
+  meta.textContent = `검색 결과 ${matches.length}건`;
+  matches.forEach((match) => {
+    const card = document.createElement("button");
+    card.className = "archive-result-card";
+    card.type = "button";
+    card.dataset.date = match.date;
+
+    const topline = document.createElement("div");
+    topline.className = "archive-result-topline";
+
+    const date = document.createElement("span");
+    date.className = "archive-result-date";
+    date.textContent = match.date;
+
+    const section = document.createElement("span");
+    section.className = "archive-result-section";
+    section.textContent = match.sectionLabel;
+
+    const snippet = document.createElement("div");
+    snippet.className = "archive-result-snippet";
+    snippet.textContent = match.snippet;
+
+    topline.append(date, section);
+    card.append(topline, snippet);
+    card.addEventListener("click", () => goToArchiveDate(match.date));
+    results.appendChild(card);
+  });
+}
+
+function searchArchivePlans() {
+  const dateFilter = document.querySelector("#archiveDateFilter")?.value || "";
+  const sectionFilter = document.querySelector("#archiveSectionFilter")?.value || "all";
+  const keyword = (document.querySelector("#archiveKeyword")?.value || "").trim().toLowerCase();
+  const localData = gatherAllLocalData();
+  const plans = localData.plans || {};
+
+  return Object.keys(plans)
+    .filter((date) => !dateFilter || date === dateFilter)
+    .sort((a, b) => b.localeCompare(a))
+    .flatMap((date) => {
+      const plan = plans[date];
+      return getArchiveSections(plan)
+        .filter((section) => sectionFilter === "all" || section.id === sectionFilter)
+        .filter((section) => !keyword || section.text.toLowerCase().includes(keyword))
+        .map((section) => ({
+          date,
+          sectionLabel: section.label,
+          snippet: makeArchiveSnippet(section.text, keyword)
+        }));
+    });
+}
+
+function getArchiveSections(plan) {
+  if (!plan || typeof plan !== "object") return [];
+
+  const editors = plan.editors && typeof plan.editors === "object" ? plan.editors : {};
+  const importantText = ["important1", "important2", "important3"]
+    .map((key) => htmlToText(editors[key]))
+    .filter(Boolean)
+    .join(" / ");
+
+  const sections = [
+    {
+      id: "important",
+      label: ARCHIVE_SECTION_LABELS.important,
+      text: importantText
+    },
+    {
+      id: "todos",
+      label: ARCHIVE_SECTION_LABELS.todos,
+      text: rowsToArchiveText(plan.todos)
+    },
+    {
+      id: "timeline",
+      label: ARCHIVE_SECTION_LABELS.timeline,
+      text: rowsToArchiveText(plan.timeline)
+    },
+    {
+      id: "memo",
+      label: ARCHIVE_SECTION_LABELS.memo,
+      text: htmlToText(editors.memo)
+    },
+    {
+      id: "thanks",
+      label: ARCHIVE_SECTION_LABELS.thanks,
+      text: htmlToText(editors.thanks)
+    },
+    {
+      id: "summary",
+      label: ARCHIVE_SECTION_LABELS.summary,
+      text: htmlToText(editors.summary)
+    }
+  ];
+
+  return sections.filter((section) => section.text);
+}
+
+function rowsToArchiveText(rows) {
+  if (!Array.isArray(rows)) return "";
+  return rows
+    .map((row) => [row.task, row.start, row.end].filter(Boolean).join(" "))
+    .filter(Boolean)
+    .join(" / ");
+}
+
+function htmlToText(html) {
+  if (!html) return "";
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  return (el.textContent || "").replace(/\s+/g, " ").trim();
+}
+
+function makeArchiveSnippet(text, keyword) {
+  const clean = (text || "").replace(/\s+/g, " ").trim();
+  if (!clean) return "내용 없음";
+  if (!keyword) return clean.length > 150 ? `${clean.slice(0, 150)}...` : clean;
+
+  const lower = clean.toLowerCase();
+  const index = lower.indexOf(keyword);
+  if (index < 0) return clean.length > 150 ? `${clean.slice(0, 150)}...` : clean;
+
+  const start = Math.max(0, index - 45);
+  const end = Math.min(clean.length, index + keyword.length + 90);
+  const prefix = start > 0 ? "..." : "";
+  const suffix = end < clean.length ? "..." : "";
+  return `${prefix}${clean.slice(start, end)}${suffix}`;
+}
+
+function goToArchiveDate(date) {
+  saveState();
+  state.planDate = date;
+  const planDateInput = document.querySelector("#planDate");
+  if (planDateInput) planDateInput.value = date;
+  reloadCurrentView();
+  closeArchiveSearch();
+  showToast(`${date} 기록으로 이동했습니다.`, "success");
+}
+
 /* ==========================================================================
    Google Drive Sync Module (구글 드라이브 기반 기기 간 동기화 모듈)
    - 권한: userinfo.email + drive.file (둘 다 비민감, 구글 검증 불필요)
@@ -443,6 +773,7 @@ function initCloudConfig() {
   try {
     const parsed = JSON.parse(saved);
     cloudConfig.syncFileId = parsed.syncFileId || "";
+    cloudConfig.archiveSheetId = parsed.archiveSheetId || "";
   } catch (e) {
     console.error("Cloud config load error:", e);
   }
@@ -791,6 +1122,394 @@ async function manualSync() {
     if (btn) btn.disabled = false;
     if (label) label.textContent = "동기화";
   }
+}
+
+async function backupCurrentPlanToSheets(options = {}) {
+  if (!googleAccessToken) {
+    if (options.auto) return;
+    showToast("먼저 Google 계정으로 로그인해 주세요.", "warning");
+    return;
+  }
+
+  const btn = document.querySelector("#backupToSheets");
+  if (btn && !options.auto) btn.disabled = true;
+  updateBackupStatus("Google Sheets에 기록을 저장하는 중입니다...");
+
+  try {
+    saveState();
+    const sheetId = await ensureArchiveSheet();
+    const backupDate = today();
+    const rows = buildDailyArchiveRows(backupDate, state.planDate, state);
+
+    if (!rows.length) {
+      updateBackupStatus("백업할 완료 기록이 없습니다.");
+      if (!options.auto) showToast("백업할 완료 기록이 없습니다.", "warning");
+      return;
+    }
+
+    await appendArchiveSheetRows(sheetId, rows);
+    clearBackedUpCompletedItems();
+    saveState();
+    renderList("todos");
+    renderList("timeline");
+    hydrateEditors();
+    hydrateImportantCheckboxes();
+
+    if (options.auto) {
+      localStorage.setItem(AUTO_SHEETS_BACKUP_KEY, backupDate);
+    }
+    updateBackupStatus("Google Sheets 백업 완료: 오늘 기록 1행 저장");
+    if (!options.auto) showToast("Google Sheets 백업 완료", "success");
+  } catch (e) {
+    if (e && e.status === 401) handleAuthExpired();
+    else {
+      updateBackupStatus(`Google Sheets 백업 실패: ${e.message || "오류"}`);
+      if (!options.auto) showToast(`Google Sheets 백업 실패: ${e.message || "오류"}`, "error");
+    }
+  } finally {
+    if (btn && !options.auto) btn.disabled = false;
+    scheduleDailySheetsBackup();
+  }
+}
+
+async function ensureArchiveSheet() {
+  if (cloudConfig.archiveSheetId) {
+    const check = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${cloudConfig.archiveSheetId}?fields=spreadsheetId`, {
+      headers: { "Authorization": `Bearer ${googleAccessToken}` }
+    });
+    if (check.status === 401) throw { status: 401 };
+    if (check.ok) return cloudConfig.archiveSheetId;
+    if (check.status !== 404) throw await buildGoogleApiError(check, "Google Sheets 백업 파일 확인에 실패했습니다.");
+    cloudConfig.archiveSheetId = "";
+    saveCloudConfig();
+  }
+
+  const foundId = await findArchiveSheet();
+  if (foundId) {
+    cloudConfig.archiveSheetId = foundId;
+    saveCloudConfig();
+    await ensureArchiveHeader(foundId);
+    return foundId;
+  }
+
+  const createRes = await fetch("https://sheets.googleapis.com/v4/spreadsheets", {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      properties: { title: ARCHIVE_SHEET_NAME },
+      sheets: [{ properties: { title: ARCHIVE_SHEET_TAB } }]
+    })
+  });
+  if (createRes.status === 401) throw { status: 401 };
+  if (!createRes.ok) throw await buildGoogleApiError(createRes, "Google Sheets 백업 파일 생성에 실패했습니다.");
+
+  const created = await createRes.json();
+  cloudConfig.archiveSheetId = created.spreadsheetId;
+  saveCloudConfig();
+  await ensureArchiveHeader(cloudConfig.archiveSheetId);
+  return cloudConfig.archiveSheetId;
+}
+
+async function findArchiveSheet() {
+  const q = encodeURIComponent(`name='${ARCHIVE_SHEET_NAME}' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false`);
+  const res = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,name,modifiedTime)`, {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 백업 파일 검색에 실패했습니다.");
+
+  const data = await res.json();
+  return data.files && data.files.length ? data.files[0].id : "";
+}
+
+async function ensureArchiveHeader(sheetId) {
+  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A1:I1`);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      values: [["Backup Date", "Plan Date", "Important", "TO DO LIST", "TIME LINE", "MEMO", "THANKS GOD", "SUMMARY", "Updated At"]]
+    })
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 제목 행 저장에 실패했습니다.");
+}
+
+async function upsertArchiveRows(sheetId, rowsByDate) {
+  await ensureArchiveHeader(sheetId);
+  const dateIndex = await getArchiveSheetDateIndex(sheetId);
+  const rowsToAppend = [];
+
+  for (const row of rowsByDate) {
+    const targetRow = dateIndex.get(row[0]);
+    if (targetRow) await updateArchiveSheetRow(sheetId, targetRow, row);
+    else rowsToAppend.push(row);
+  }
+
+  if (rowsToAppend.length) await appendArchiveSheetRows(sheetId, rowsToAppend);
+}
+
+async function getArchiveSheetDateIndex(sheetId) {
+  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A:A`);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`, {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 날짜 목록 확인에 실패했습니다.");
+
+  const data = await res.json();
+  const index = new Map();
+  (data.values || []).forEach((row, i) => {
+    const date = row && row[0];
+    if (date && date !== "Date") index.set(date, i + 1);
+  });
+  return index;
+}
+
+async function updateArchiveSheetRow(sheetId, rowNumber, row) {
+  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:H${rowNumber}`);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`, {
+    method: "PUT",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ values: [row] })
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 행 업데이트에 실패했습니다.");
+}
+
+async function appendArchiveSheetRows(sheetId, rows) {
+  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A:I`);
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({ values: rows })
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 행 추가에 실패했습니다.");
+}
+
+function buildDailyArchiveRows(backupDate, planDate, plan) {
+  const editors = plan && plan.editors && typeof plan.editors === "object" ? plan.editors : {};
+  const updatedAt = new Date().toISOString();
+  const importantItems = [];
+
+  ["important1", "important2", "important3"].forEach((key) => {
+    const text = htmlToText(editors[key]);
+    if (plan.importantDone && plan.importantDone[key] && text) {
+      importantItems.push(text);
+    }
+  });
+
+  const todoText = buildTodoBackupCell(plan.todos || []);
+  const timelineText = buildTimelineBackupCell(plan.timeline || []);
+  const memoText = htmlToText(editors.memo);
+  const thanksText = htmlToText(editors.thanks);
+  const summaryText = htmlToText(editors.summary);
+
+  const hasBackupData = importantItems.length || todoText || timelineText || memoText || thanksText || summaryText;
+  if (!hasBackupData) return [];
+
+  return [[
+    backupDate,
+    planDate,
+    importantItems.join("\n\n"),
+    todoText,
+    timelineText,
+    memoText,
+    thanksText,
+    summaryText,
+    updatedAt
+  ]];
+}
+
+function buildTodoBackupCell(rows) {
+  if (!Array.isArray(rows)) return "";
+  return rows
+    .filter((row) => row.end && row.task)
+    .map((row, index) => [
+      `#${index + 1}`,
+      `내용: ${row.task}`,
+      `시작: ${row.start || "-"}`,
+      `완료: ${row.end}`
+    ].join("\n"))
+    .join("\n\n");
+}
+
+function buildTimelineBackupCell(rows) {
+  if (!Array.isArray(rows)) return "";
+  return rows
+    .filter((row) => row.end && row.task)
+    .map((row, index) => [
+      `#${index + 1}`,
+      `내용: ${row.task}`,
+      `시작: ${row.start || "-"}`,
+      `마침: ${row.end}`
+    ].join("\n"))
+    .join("\n\n");
+}
+
+function buildBackupPlanPayload(backupDate, planDate, plan) {
+  const row = buildDailyArchiveRows(backupDate, planDate, plan)[0];
+  if (!row) return null;
+  return {
+    backupDate: row[0],
+    planDate: row[1],
+    important: row[2],
+    todos: row[3],
+    timeline: row[4],
+    memo: row[5],
+    thanks: row[6],
+    summary: row[7],
+    updatedAt: row[8]
+  };
+}
+
+function clearBackedUpCompletedItems() {
+  state.todos = (state.todos || []).filter((row) => !row.end || !row.task);
+  state.timeline = (state.timeline || []).filter((row) => !row.end || !row.task);
+
+  ["important1", "important2", "important3"].forEach((key) => {
+    if (state.importantDone && state.importantDone[key] && htmlToText(state.editors[key])) {
+      state.editors[key] = "";
+      state.importantDone[key] = false;
+    }
+  });
+
+  ["memo", "thanks", "summary"].forEach((key) => {
+    if (htmlToText(state.editors[key])) state.editors[key] = "";
+  });
+
+  ensureRows("todos", DEFAULT_TODO_ROWS);
+  ensureRows("timeline", DEFAULT_TIMELINE_ROWS);
+}
+
+function openArchiveSheet() {
+  if (!cloudConfig.archiveSheetId) {
+    showToast("먼저 Google Sheets 백업을 실행해 주세요.", "warning");
+    return;
+  }
+  window.open(`https://docs.google.com/spreadsheets/d/${cloudConfig.archiveSheetId}/edit`, "_blank", "noopener");
+}
+
+function getOrCreateNotionUserId() {
+  let userId = localStorage.getItem(NOTION_USER_ID_KEY);
+  if (!userId) {
+    userId = window.crypto?.randomUUID ? window.crypto.randomUUID() : makeId();
+    localStorage.setItem(NOTION_USER_ID_KEY, userId);
+  }
+  return userId;
+}
+
+function getOrCreateNotionUserSecret() {
+  let secret = localStorage.getItem(NOTION_USER_SECRET_KEY);
+  if (!secret) {
+    const bytes = new Uint8Array(24);
+    if (window.crypto?.getRandomValues) window.crypto.getRandomValues(bytes);
+    secret = [...bytes].map((b) => b.toString(16).padStart(2, "0")).join("") || makeId();
+    localStorage.setItem(NOTION_USER_SECRET_KEY, secret);
+  }
+  return secret;
+}
+
+function getNotionParentPageId() {
+  return (document.querySelector("#notionParentPageId")?.value || localStorage.getItem(NOTION_PARENT_PAGE_ID_KEY) || "").trim();
+}
+
+function connectNotionBackup() {
+  const parentPageId = getNotionParentPageId();
+  if (!parentPageId) {
+    showToast("Notion 페이지 ID를 먼저 입력해 주세요.", "warning");
+    return;
+  }
+
+  localStorage.setItem(NOTION_PARENT_PAGE_ID_KEY, parentPageId);
+  const url = new URL(`${BACKUP_WORKER_BASE_URL}/auth/notion/start`);
+  url.searchParams.set("userId", getOrCreateNotionUserId());
+  url.searchParams.set("userSecret", getOrCreateNotionUserSecret());
+  url.searchParams.set("parentPageId", parentPageId);
+  window.open(url.toString(), "_blank", "noopener");
+  updateNotionBackupStatus("Notion 승인 창을 열었습니다. 승인 후 돌아와 백업을 실행하세요.");
+}
+
+async function backupCurrentPlanToNotion() {
+  const parentPageId = getNotionParentPageId();
+  if (!parentPageId) {
+    showToast("Notion 페이지 ID를 먼저 입력해 주세요.", "warning");
+    return;
+  }
+
+  const btn = document.querySelector("#backupToNotion");
+  if (btn) btn.disabled = true;
+  updateNotionBackupStatus("Notion에 백업하는 중입니다...");
+
+  try {
+    saveState();
+    const plan = buildBackupPlanPayload(today(), state.planDate, state);
+    if (!plan) {
+      updateNotionBackupStatus("백업할 완료 기록이 없습니다.");
+      showToast("백업할 완료 기록이 없습니다.", "warning");
+      return;
+    }
+
+    const res = await fetch(`${BACKUP_WORKER_BASE_URL}/backup/notion`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        userId: getOrCreateNotionUserId(),
+        userSecret: getOrCreateNotionUserSecret(),
+        plan
+      })
+    });
+
+    const result = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(result.error || `Notion backup failed (${res.status})`);
+
+    clearBackedUpCompletedItems();
+    saveState();
+    renderList("todos");
+    renderList("timeline");
+    hydrateEditors();
+    hydrateImportantCheckboxes();
+    updateNotionBackupStatus("Notion 백업 완료");
+    showToast("Notion 백업 완료", "success");
+  } catch (e) {
+    updateNotionBackupStatus(`Notion 백업 실패: ${e.message || "오류"}`);
+    showToast(`Notion 백업 실패: ${e.message || "오류"}`, "error");
+  } finally {
+    if (btn) btn.disabled = false;
+    updateNotionBackupStatus();
+  }
+}
+
+function scheduleDailySheetsBackup() {
+  window.clearTimeout(autoSheetsBackupTimer);
+  const now = new Date();
+  const target = new Date(now);
+  target.setHours(23, 59, 0, 0);
+  if (target <= now) target.setDate(target.getDate() + 1);
+
+  autoSheetsBackupTimer = window.setTimeout(runScheduledSheetsBackup, target.getTime() - now.getTime());
+}
+
+async function runScheduledSheetsBackup() {
+  const backupDate = today();
+  if (localStorage.getItem(AUTO_SHEETS_BACKUP_KEY) === backupDate) {
+    scheduleDailySheetsBackup();
+    return;
+  }
+  await backupCurrentPlanToSheets({ auto: true });
 }
 
 /* 사용자 피드백 미니 토스트 알림창 */

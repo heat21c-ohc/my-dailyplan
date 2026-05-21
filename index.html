@@ -36,6 +36,14 @@
             <span class="btn-icon">☁️</span>
             <span class="btn-label">동기화</span>
           </button>
+          <button id="openBackupPanel" class="backup-settings-btn" type="button" title="기록 백업 위치 선택">
+            <span class="btn-icon">↥</span>
+            <span class="btn-label">Backup</span>
+          </button>
+          <button id="openArchiveSearch" class="archive-trigger-btn" type="button" title="저장된 Daily Plan 검색">
+            <span class="btn-icon">⌕</span>
+            <span class="btn-label">Archive</span>
+          </button>
           <button id="themeToggle" class="theme-toggle-btn" type="button" aria-label="테마 전환" title="화면 테마 전환">🌙</button>
           <label class="date-field">
             <span>DATE</span>
@@ -238,6 +246,92 @@
         </section>
       </section>
     </main>
+
+    <section id="backupModal" class="backup-modal" aria-labelledby="backupTitle" aria-modal="true" role="dialog" hidden>
+      <div class="archive-backdrop" data-backup-close></div>
+      <div class="archive-dialog backup-dialog">
+        <div class="archive-header">
+          <div>
+            <p class="archive-eyebrow">Archive backup</p>
+            <h2 id="backupTitle">백업 위치 선택</h2>
+          </div>
+          <button id="closeBackupPanel" class="archive-close-btn" type="button" aria-label="백업 설정 닫기">×</button>
+        </div>
+
+        <div class="backup-options">
+          <article class="backup-option-card">
+            <div>
+              <h3>Google Sheets</h3>
+              <p>완료된 항목을 항목별 행으로 저장합니다. 수동 실행 또는 매일 23:59 자동 실행됩니다.</p>
+            </div>
+            <div class="backup-actions">
+              <button id="backupToSheets" class="backup-primary-action" type="button">Sheets로 백업</button>
+              <button id="openArchiveSheet" class="backup-secondary-action" type="button" disabled>시트 열기</button>
+            </div>
+          </article>
+
+          <article class="backup-option-card">
+            <div>
+              <h3>Notion</h3>
+              <p>Notion의 백업용 페이지 아래에 날짜별 기록 페이지를 만듭니다.</p>
+            </div>
+            <div class="backup-actions backup-actions-column">
+              <label class="backup-input-field">
+                <span>Notion Page ID</span>
+                <input id="notionParentPageId" type="text" placeholder="백업용 Notion 페이지 ID" autocomplete="off" />
+              </label>
+              <div class="backup-button-row">
+                <button id="connectNotionBackup" class="backup-secondary-action" type="button">Notion 연결</button>
+                <button id="backupToNotion" class="backup-primary-action" type="button" disabled>Notion 백업</button>
+              </div>
+            </div>
+          </article>
+        </div>
+
+        <div id="backupStatusText" class="archive-result-meta">Google Sheets archive will be created on first backup.</div>
+        <div id="notionBackupStatusText" class="archive-result-meta">Notion 백업은 페이지 ID 입력 후 연결해야 합니다.</div>
+      </div>
+    </section>
+
+    <section id="archiveModal" class="archive-modal" aria-labelledby="archiveTitle" aria-modal="true" role="dialog" hidden>
+      <div class="archive-backdrop" data-archive-close></div>
+      <div class="archive-dialog">
+        <div class="archive-header">
+          <div>
+            <p class="archive-eyebrow">Saved plans</p>
+            <h2 id="archiveTitle">Archive 검색</h2>
+          </div>
+          <button id="closeArchiveSearch" class="archive-close-btn" type="button" aria-label="Archive 검색 닫기">×</button>
+        </div>
+
+        <div class="archive-controls">
+          <label class="archive-field">
+            <span>DATE</span>
+            <input id="archiveDateFilter" type="date" />
+          </label>
+          <label class="archive-field">
+            <span>SECTION</span>
+            <select id="archiveSectionFilter">
+              <option value="all">전체 섹션</option>
+              <option value="important">Important</option>
+              <option value="todos">TO DO LIST</option>
+              <option value="timeline">TIME LINE</option>
+              <option value="memo">MEMO</option>
+              <option value="thanks">THANKS GOD</option>
+              <option value="summary">SUMMARY</option>
+            </select>
+          </label>
+          <label class="archive-field archive-keyword-field">
+            <span>KEYWORD</span>
+            <input id="archiveKeyword" type="search" placeholder="검색어 입력" autocomplete="off" />
+          </label>
+          <button id="clearArchiveSearch" class="archive-clear-btn" type="button">초기화</button>
+        </div>
+
+        <div id="archiveResultMeta" class="archive-result-meta">저장된 기록을 불러오는 중입니다.</div>
+        <div id="archiveResults" class="archive-results" aria-live="polite"></div>
+      </div>
+    </section>
 
     <template id="todoTemplate">
       <article class="plan-row" data-row>
