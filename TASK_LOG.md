@@ -48,8 +48,8 @@
   상태: Done
   범위: 현재 통합 상태 커밋 및 GitHub 백업
   변경 파일: `TASK_LOG.md`, `app.js`, `index.html`
-  검증: `node --check app.js` 통과, 변경 파일(`TASK_LOG.md`, `app.js`, `index.html`)과 DP-036/DP-037 기록 대조 완료, Git 커밋 후 `origin/main` 푸시 예정
-  리스크/메모: DP-036 기능 변경 기록과 실제 미커밋 변경 파일을 대조했으며, 구글 로그인/드라이브 동기화/캘린더 iframe 실동작은 HTTPS 배포 및 OAuth 승인 출처 등록 후 검증 필요
+  검증: `node --check app.js` 통과, 변경 파일(`TASK_LOG.md`, `app.js`, `index.html`)과 DP-036/DP-037 기록 대조 완료, 원격 변경을 `git pull --rebase origin main`으로 통합 후 `origin/main` 푸시 완료
+  리스크/메모: DP-036 기능 변경 기록과 실제 미커밋 변경 파일을 대조했으며, 구글 로그인/드라이브 동기화/캘린더 iframe 실동작은 HTTPS 배포 및 OAuth 승인 출처 등록 후 검증 필요. 최종 백업 커밋은 `0e3a7a0 feat: add google drive sync integration`.
 
 - ID: DP-036
   담당: 윙맨
