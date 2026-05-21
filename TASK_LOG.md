@@ -37,27 +37,52 @@
   검증: 모바일 폰 로그인 시 PC에서 작성한 데이터가 백그라운드에서 실시간으로 불러와지는지 여부 검증
   리스크/메모: 사용자가 로그인 한번만으로 수동 조작 없이 기기 간 일치화가 되는 프리미엄 양방향 Sync 솔루션 (설계 승인 완료)
 
-- ID: DP-008
-  담당: 미배정
-  상태: Backlog
-  범위: 날짜별 계획 히스토리 저장 기능 검토
-  변경 파일: 미정
-  검증: 날짜 변경 후 과거 데이터 조회 가능 여부
-  리스크/메모: 현재는 단일 로컬 저장 상태만 유지
-
-- ID: DP-009
-  담당: 미배정
-  상태: Backlog
-  범위: PDF 또는 인쇄 최적화 스타일 추가 검토
-  변경 파일: `styles.css`
-  검증: A4 출력 시 주요 섹션 잘림 여부
-  리스크/메모: 브라우저별 인쇄 결과 차이 확인 필요
-
 ## In Progress
 
-(현재 진행 중인 작업 없음 - 주군 명령으로 오늘 업무 마감 및 깃허브 최종 백업 완료)
+(현재 진행 중인 작업 없음 - DP-036 완료)
 
 ## Done
+
+- ID: DP-037
+  담당: 멀린
+  상태: Done
+  범위: 현재 통합 상태 커밋 및 GitHub 백업
+  변경 파일: `TASK_LOG.md`, `app.js`, `index.html`
+  검증: `node --check app.js` 통과, 변경 파일(`TASK_LOG.md`, `app.js`, `index.html`)과 DP-036/DP-037 기록 대조 완료, Git 커밋 후 `origin/main` 푸시 예정
+  리스크/메모: DP-036 기능 변경 기록과 실제 미커밋 변경 파일을 대조했으며, 구글 로그인/드라이브 동기화/캘린더 iframe 실동작은 HTTPS 배포 및 OAuth 승인 출처 등록 후 검증 필요
+
+- ID: DP-036
+  담당: 윙맨
+  상태: Done
+  범위: 다중 사용자 배포형 전환 - ①OAuth 권한 슬림화 ②구글 드라이브 JSON 파일 기반 기기 간 양방향 동기화 ③본인 캘린더 iframe 임베드(보기 전용) ④깨진 구글 로고 SVG 수정
+  변경 파일: `app.js`(구글 모듈 전면 교체: 단방향 Sheets 백업 → 드라이브 JSON 양방향 동기화, 스코프를 userinfo.email+drive.file로 축소), `index.html`(헤더 버튼 라벨 "통합 백업 전송"→"동기화", 캘린더 연동 후 영역에 iframe#calendarFrame 추가, 구글 로고 SVG를 공식 4색 경로로 교체)
+  검증: `node --check app.js` 통과(780행). 고아 참조 0건 확인 — triggerUnifiedBackup/backupToGoogleSheets/stripHtml/spreadsheets/calendar.readonly 전부 제거됨. index.html 변경(calendarFrame, 동기화 버튼, 일정 추가·편집 링크) 디스크 반영 확인, 구버전 "통합 백업 전송" 잔존 0건.
+  미검증(외부 의존): 실제 구글 로그인·드라이브 동기화·캘린더 임베드 실동작은 HTTPS 호스팅 + OAuth 승인된 출처 등록 후에만 검증 가능. 로컬 file://에서는 구글 로그인 자체가 불가.
+  리스크/메모: ①동기화 정책은 전체 문서 last-write-wins(기기 동시 편집 시 마지막 저장이 우선, 동시 충돌 시 일부 손실 가능 — v1 단순화). ②액세스 토큰은 sessionStorage 보관이라 탭 종료 시 재로그인 필요(GIS 암묵 플로우 특성). ③데이터는 사용자 본인 드라이브의 `my_dailyplan_sync.json` 단일 파일에 저장(drive.file 범위라 앱이 만든 파일만 접근).
+
+- ID: DP-035
+  담당: 윙맨
+  상태: Done
+  범위: Backlog의 DP-008·DP-009 실제 구현 여부 검증, 보드 상태 정합화, 성공 기준 대비 QA 점검
+  변경 파일: `TASK_LOG.md` (기능 코드 변경 없음 - 검증 및 문서 정리 전용)
+  검증: `node --check app.js` 통과(문법 정상), git 작업트리 클린, 체크포인트 태그 `checkpoint-2026-05-21-daily-plan-layout` 존재 확인. PROJECT_PLAN 7개 성공 기준 전수 점검 결과 — (1)PC 다열 배치 정상(현 구조는 좌/우 2메인열, 1320px 2열·1100px 1열 전환), (2)모바일 세로 재배치 정상(1100px 1열, 860px 행 리플로우로 겹침 방지), (3)TO DO/TIME LINE 추가·삭제·드래그 정렬 로직 정상(addRow/delete/bindPointerReorder), (4)TO DO 날짜 자동입력 정상(fillDefaultDateTime→today), (5)TIME LINE 시간 자동입력 정상(→localDateTime), (6)Important/MEMO/THANKS/SUMMARY 편집 정상(contenteditable), (7)로컬 자동저장 정상(scheduleSave/saveState). 전 항목 PASS.
+  리스크/메모: 기능 변경 없이 검증만 수행하여 회귀 리스크 없음. DP-008/009가 Backlog에 잔존하던 상태 불일치를 Done으로 정합화함(실제 구현 주체는 DP-027). 발견한 경미 사항은 Issue/Suggestion 참고.
+
+- ID: DP-008
+  담당: 공명(구현, DP-027) / 윙맨(검증·정합화, DP-035)
+  상태: Done
+  범위: 날짜별 계획 히스토리 저장 기능
+  변경 파일: `app.js` (DP-027에서 구현 완료)
+  검증: app.js 코드 확인 — `STORAGE_KEY_PREFIX`("daily-plan-state-v1-")로 날짜별 분리 저장, `getStorageKeyForDate(date)` 키 생성, `migrateLegacyData()`로 기존 단일키 데이터 자동 이전, planDate 입력 변경 시 현재 저장→날짜 전환→해당 날짜 데이터 재로드 흐름 정상. node --check 통과.
+  리스크/메모: Backlog에 남아있던 항목을 실제 구현 확인 후 Done으로 이동. 날짜별 개별 키 저장이므로 텍스트 위주 사용 시 localStorage 용량 문제 없음.
+
+- ID: DP-009
+  담당: 공명(구현, DP-027) / 윙맨(검증·정합화, DP-035)
+  상태: Done
+  범위: PDF/인쇄 최적화 스타일
+  변경 파일: `styles.css` (DP-027에서 구현 완료)
+  검증: styles.css `@media print` 블록(1191행~) 확인 — 색상 반전(흰 배경/검정 글자), 조작용 UI 숨김(드래그 핸들·삭제·지우기 버튼·에디터 툴바·캘린더 패널·아이콘 버튼), 1열 세로 정돈, `.panel`에 page-break-inside: avoid 적용으로 인쇄 잘림 방지. node --check 통과.
+  리스크/메모: Backlog에 남아있던 항목을 실제 구현 확인 후 Done으로 이동. 브라우저별 인쇄 미세 차이는 실기기 출력 시 추가 확인 권장.
 
 - ID: DP-033
   담당: 공명
@@ -311,3 +336,15 @@
 
 - 날짜별 데이터 분리가 필요하면 저장 구조를 `planDate` 기준 맵으로 변경하는 것이 좋다.
 - 협업자가 많아질 경우 Git 브랜치 전략과 PR 템플릿을 추가하는 것이 좋다.
+- [DP-035 발견] `PROJECT_PLAN.md` 성공 기준 #1 문구("PC 3열 중심")가 현재 구현(좌/우 2메인열 구조)과 불일치. 문서화 팀이 실제 레이아웃 기준으로 갱신 권장. (문서 drift, 기능 정상)
+- [DP-035 발견] `index.html` 구글 로그인 버튼 SVG에서 파란색(#4285F4) path 좌표에 `1.5-.1.8-2.6` 같은 비정상 숫자 포함 → 'G' 로고가 정확히 렌더링되지 않을 수 있음. 기능 영향 없음(클릭/로그인 정상). 범위 밖이라 미수정, UX/UI 팀이 정식 Google 'G' 로고 SVG로 교체 권장.
+- [DP-035 메모] DP-034(드라이브 양방향 Sync) 착수 전 선행 필요: ① 현 코드는 단방향 백업(triggerUnifiedBackup→Sheets append)만 존재, 양방향 풀(pull)/병합 로직 없음 ② OAuth Client ID의 승인된 출처(authorized origins)에 실제 배포 도메인 등록 여부 확인 ③ 충돌 해결 정책(최신 우선 vs 병합) 설계 확정 ④ 실제 2대 기기 검증 환경 필요. 외부 의존성으로 단일 세션 내 완결 검증 불가.
+  → DP-036에서 ①(양방향 동기화), ③(전체 문서 last-write-wins)을 구현 완료. ②④는 아래 배포 선행작업 참고.
+
+- [DP-036 배포 선행작업 — 보스 직접 수행 필요]
+  1. 정적 HTTPS 호스팅에 index.html/styles.css/app.js 업로드 (GitHub Pages 권장, 무료·HTTPS 기본). 서버 운영 불필요.
+  2. 구글 클라우드 콘솔 → 해당 OAuth 클라이언트 → "승인된 자바스크립트 원본"에 배포 도메인 추가 (예: https://<계정>.github.io). 미등록 시 로그인 실패.
+  3. OAuth 동의화면 스코프를 userinfo.email + drive.file 로 정리(기존 spreadsheets/calendar 제거). 둘 다 비민감 스코프라 공개 배포 시 구글 검증 불필요.
+  4. 캘린더 임베드는 사용자가 해당 브라우저에서 본인 구글 계정에 로그인되어 있어야 일정이 표시됨(비공개 캘린더 특성).
+
+- [DP-036 개발 메모] 마운트된 작업폴더 파일은 셸 `sed -i`/`rm` 사용 금지. 셸 in-place 수정이 파일도구(Read/Write) 캐시와 어긋나 동기화 깨짐을 유발함(이번 세션에서 발생, 셸 채널 재기록으로 복구). 코드 수정은 파일도구(Write/Edit)로 일원화하고, 검증은 셸 node --check로만 수행 권장.
