@@ -594,24 +594,19 @@ function updateGoogleUI(isLinked) {
   const linkedArea = document.querySelector("#calendarLinked");
   const syncBtn = document.querySelector("#syncCalendar");
   const disconnectBtn = document.querySelector("#disconnectGoogle");
-  const iframe = document.querySelector("#googleCalendarIframe");
   
   if (isLinked) {
     if (unlinkedArea) unlinkedArea.style.display = "none";
     if (linkedArea) linkedArea.style.display = "block";
     if (syncBtn) syncBtn.style.display = "inline-flex";
     if (disconnectBtn) disconnectBtn.style.display = "inline-flex";
-    if (iframe && (iframe.src === "about:blank" || iframe.src === "")) {
-      const selectedDate = state.planDate || today();
-      const dateFormatted = selectedDate.replace(/-/g, "");
-      iframe.src = `https://calendar.google.com/calendar/embed?src=primary&ctz=Asia%2FSeoul&mode=AGENDA&dates=${dateFormatted}%2F${dateFormatted}`;
-    }
   } else {
     if (unlinkedArea) unlinkedArea.style.display = "grid";
     if (linkedArea) {
       linkedArea.style.display = "none";
+      const listContainer = document.querySelector("#calendarEventsList");
+      if (listContainer) listContainer.innerHTML = "";
     }
-    if (iframe) iframe.src = "about:blank";
     if (syncBtn) syncBtn.style.display = "none";
     if (disconnectBtn) disconnectBtn.style.display = "none";
     const statusText = document.querySelector("#calendarStatusText");
@@ -620,25 +615,83 @@ function updateGoogleUI(isLinked) {
 }
 
 /* 3. 구글 캘린더 일정 조회 */
-function fetchGoogleCalendar() {
+async function fetchGoogleCalendar() {
   if (!googleAccessToken) return;
   
   const statusText = document.querySelector("#calendarStatusText");
-  const iframe = document.querySelector("#googleCalendarIframe");
+  const listContainer = document.querySelector("#calendarEventsList");
+  if (statusText) statusText.textContent = "일정을 가져오는 중이옵니다...";
   
-  if (statusText) statusText.textContent = "일정을 불러오는 중이옵니다... ⚡";
+  const selectedDate = state.planDate; // YYYY-MM-DD
+  const timeMin = `${selectedDate}T00:00:00Z`;
+  const timeMax = `${selectedDate}T23:59:59Z`;
   
-  if (iframe) {
-    const selectedDate = state.planDate || today();
-    const dateFormatted = selectedDate.replace(/-/g, "");
-    const baseUrl = `https://calendar.google.com/calendar/embed?src=primary&ctz=Asia%2FSeoul&mode=AGENDA&dates=${dateFormatted}%2F${dateFormatted}`;
+  const url = `https://www.googleapis.com/calendar/v3/calendars/primary/events?timeMin=${encodeURIComponent(timeMin)}&timeMax=${encodeURIComponent(timeMax)}&singleEvents=true&orderBy=startTime`;
+  
+  try {
+    const response = await fetch(url, {
+      headers: {
+        "Authorization": `Bearer ${googleAccessToken}`
+      }
+    });
     
-    iframe.src = "about:blank"; // brief flash to show reload
-    setTimeout(() => {
-      iframe.src = baseUrl;
-      if (statusText) statusText.textContent = "구글 캘린더 실시간 연동 중 ✨";
-    }, 150);
+    if (response.status === 401) {
+      // Access Token 만료에 따른 연동 초기화
+      googleAccessToken = null;
+      sessionStorage.removeItem("google_access_token");
+      updateGoogleUI(false);
+      if (statusText) statusText.textContent = "구글 인증 토큰 만료. 재연동 필요.";
+      return;
+    }
+    
+    if (!response.ok) throw new Error("Calendar fetch response error");
+    
+    const data = await response.json();
+    renderCalendarEvents(data.items);
+  } catch (error) {
+    console.error("Calendar fetch error:", error);
+    if (statusText) statusText.textContent = "일정 새로고침 실패";
   }
+}
+
+/* 구글 일정 카드 그리기 */
+function renderCalendarEvents(events) {
+  const statusText = document.querySelector("#calendarStatusText");
+  const listContainer = document.querySelector("#calendarEventsList");
+  if (!listContainer) return;
+  
+  listContainer.innerHTML = "";
+  
+  if (!events || events.length === 0) {
+    if (statusText) statusText.textContent = "오늘 일정이 비어 있사옵니다. ✨";
+    listContainer.innerHTML = `<div style="text-align:center; padding:32px 16px; font-size:12px; color:var(--muted); font-style:italic;">오늘 등록된 일정이 없사옵니다.</div>`;
+    return;
+  }
+  
+  if (statusText) statusText.textContent = `오늘 일정 (${events.length}건)`;
+  
+  const listElement = document.createElement("div");
+  listElement.className = "calendar-events-list";
+  
+  events.forEach(event => {
+    const card = document.createElement("div");
+    card.className = "calendar-event-card";
+    
+    let timeStr = "종일 일정";
+    if (event.start && event.start.dateTime) {
+      const start = new Date(event.start.dateTime);
+      const end = new Date(event.end.dateTime);
+      const formatTime = (date) => date.toLocaleTimeString("ko-KR", { hour: "2-digit", minute: "2-digit", hour12: false });
+      timeStr = `${formatTime(start)} ~ ${formatTime(end)}`;
+    }
+    
+    card.innerHTML = `
+      <span class="calendar-event-time">⏰ ${timeStr}</span>
+      <span class="calendar-event-title">${event.summary || "(제목 없음)"}</span>
+    `;
+    listElement.appendChild(card);
+  });
+  listContainer.appendChild(listElement);
 }
 
 /* 4. 구글 스프레드시트 백업 핵심 엔진 */

@@ -1690,3 +1690,23 @@ body.dark-mode .toast-container {
   color: #0f172a;
   border: 1px solid rgba(0, 0, 0, 0.1);
 }
+
+.google-calendar-link-btn:hover {
+  background: var(--accent-soft) !important;
+  border-color: var(--accent) !important;
+  color: var(--accent) !important;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(99, 102, 241, 0.1);
+}
+
+body.dark-mode .google-calendar-link-btn {
+  background: #1e293b !important;
+  border-color: rgba(255, 255, 255, 0.08) !important;
+  color: #f8fafc !important;
+}
+
+body.dark-mode .google-calendar-link-btn:hover {
+  background: rgba(99, 102, 241, 0.15) !important;
+  border-color: var(--accent) !important;
+  color: #a5b4fc !important;
+}

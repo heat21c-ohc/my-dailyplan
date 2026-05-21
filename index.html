@@ -122,8 +122,13 @@
                 </div>
 
                 <!-- 2. 구글 연동 후 화면 (일정 목록) -->
-                <div id="calendarLinked" class="calendar-events-container" style="display: none; width: 100%; height: 100%;">
-                  <iframe id="googleCalendarIframe" src="about:blank" style="border: 0; width: 100%; height: 380px; border-radius: var(--radius); box-shadow: var(--shadow-sm);" frameborder="0" scrolling="no"></iframe>
+                <div id="calendarLinked" class="calendar-events-container" style="display: none; width: 100%;">
+                  <div style="margin-bottom: 12px; display: flex; justify-content: center;">
+                    <a id="openGoogleCalendarBtn" href="https://calendar.google.com" target="_blank" class="google-calendar-link-btn" style="text-decoration: none; width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 10px; border-radius: var(--radius-sm); background: var(--panel-soft); border: 1px solid var(--line-soft); color: var(--text); font-size: 12px; font-weight: 600; cursor: pointer; transition: all 0.2s;">
+                      📅 구글 캘린더 열기 &amp; 일정 편집
+                    </a>
+                  </div>
+                  <div id="calendarEventsList" class="calendar-events-list"></div>
                 </div>
               </div>
               
