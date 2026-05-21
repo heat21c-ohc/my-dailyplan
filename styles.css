@@ -83,6 +83,23 @@ textarea {
   gap: 12px;
 }
 
+.header-google-button,
+.header-logout-button {
+  height: 46px;
+  white-space: nowrap;
+}
+
+.header-google-button {
+  padding: 0 14px;
+}
+
+.header-logout-button {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  padding: 0 12px;
+}
+
 .backup-trigger-btn {
   display: inline-flex;
   align-items: center;
@@ -1095,6 +1112,24 @@ body.dark-mode .important-item.is-completed .rich-editor {
 
   .date-field {
     min-width: 0;
+  }
+
+  .header-controls {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px;
+  }
+
+  .header-google-button,
+  .header-logout-button,
+  .backup-trigger-btn,
+  .theme-toggle-btn,
+  .date-field {
+    width: 100%;
+  }
+
+  .date-field {
+    grid-column: 1 / -1;
   }
 
   .row-list {

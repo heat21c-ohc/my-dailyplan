@@ -563,15 +563,21 @@ function handleAuthExpired() {
 function updateGoogleUI(isLinked) {
   const unlinkedArea = document.querySelector("#calendarUnlinked");
   const linkedArea = document.querySelector("#calendarLinked");
+  const connectBtn = document.querySelector("#connectGoogleBtn");
+  const disconnectBtn = document.querySelector("#disconnectGoogleBtn");
   const statusText = document.querySelector("#calendarStatusText");
 
   if (isLinked) {
     if (unlinkedArea) unlinkedArea.style.display = "none";
     if (linkedArea) linkedArea.style.display = "block";
+    if (connectBtn) connectBtn.style.display = "none";
+    if (disconnectBtn) disconnectBtn.style.display = "inline-flex";
     if (statusText) statusText.textContent = "Google 연동 완료 / 자동 동기화 중";
   } else {
     if (unlinkedArea) unlinkedArea.style.display = "flex";
     if (linkedArea) linkedArea.style.display = "none";
+    if (connectBtn) connectBtn.style.display = "inline-flex";
+    if (disconnectBtn) disconnectBtn.style.display = "none";
     if (statusText) statusText.textContent = "로그인하면 기기 간 자동 동기화됩니다";
   }
 }
