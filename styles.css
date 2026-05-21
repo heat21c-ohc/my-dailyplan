@@ -83,6 +83,62 @@ textarea {
   gap: 12px;
 }
 
+.backup-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  height: 46px;
+  padding: 0 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  color: var(--text);
+  font-family: 'Outfit', 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  white-space: nowrap;
+  outline: none;
+  user-select: none;
+}
+
+.backup-trigger-btn .btn-icon {
+  font-size: 14px;
+  transition: transform 0.25s ease;
+}
+
+.backup-trigger-btn:hover {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(99, 102, 241, 0.04), rgba(79, 70, 229, 0.04));
+  color: var(--accent);
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(99, 102, 241, 0.08);
+}
+
+.backup-trigger-btn:hover .btn-icon {
+  transform: translateY(-1px);
+}
+
+.backup-trigger-btn:active {
+  transform: translateY(0) scale(0.97);
+  box-shadow: var(--shadow-sm);
+}
+
+body.dark-mode .backup-trigger-btn {
+  background: var(--panel);
+  border-color: var(--line-soft);
+  color: var(--text);
+}
+
+body.dark-mode .backup-trigger-btn:hover {
+  border-color: var(--accent);
+  background: linear-gradient(135deg, rgba(165, 180, 252, 0.06), rgba(99, 102, 241, 0.06));
+  color: #a5b4fc;
+}
+
 .theme-toggle-btn {
   display: inline-grid;
   width: 46px;
