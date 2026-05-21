@@ -1324,3 +1324,367 @@ body.dark-mode .important-item:hover span {
     content: "" !important;
   }
 }
+
+/* ==========================================================================
+   Cloud Backup & Google Integration UI Styles (클라우드 백업 및 구글 연동 UI 스타일)
+   ========================================================================== */
+/* 구글 로그인 버튼 */
+.google-login-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+  font-size: 14px;
+  font-weight: 600;
+  padding: 12px 24px;
+  cursor: pointer;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+  width: 100%;
+  max-width: 280px;
+}
+
+.google-login-button:hover {
+  transform: translateY(-2px);
+  border-color: #4285F4;
+  box-shadow: 0 6px 20px rgba(66, 133, 244, 0.15);
+  background: var(--panel-soft);
+}
+
+.google-login-button:active {
+  transform: translateY(0);
+}
+
+.g-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* 캘린더 아이콘 버튼 및 로딩/상태 */
+.calendar-header-controls .calendar-icon-btn {
+  border: none;
+  background: var(--panel-soft);
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+  font-size: 14px;
+}
+
+.calendar-header-controls .calendar-icon-btn:hover {
+  transform: scale(1.08);
+  background: var(--line-soft);
+}
+
+/* 일정 목록 렌더링 카드 스타일 */
+.calendar-events-list {
+  display: grid;
+  gap: 10px;
+  width: 100%;
+}
+
+.calendar-event-card {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  background: var(--panel);
+  border: 1px solid var(--line-soft);
+  border-left: 4px solid #4285F4;
+  border-radius: var(--radius-sm);
+  padding: 10px 14px;
+  box-shadow: var(--shadow-sm);
+  transition: all 0.2s ease;
+}
+
+.calendar-event-card:hover {
+  transform: translateX(4px);
+  border-color: #4285F4;
+  box-shadow: 0 4px 12px rgba(66, 133, 244, 0.08);
+}
+
+.calendar-event-time {
+  font-family: 'Outfit', sans-serif;
+  font-size: 11px;
+  font-weight: 700;
+  color: #4285F4;
+}
+
+.calendar-event-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text);
+}
+
+/* 통합 백업 및 클라우드 설정 영역 */
+.cloud-backup-section {
+  margin-top: 16px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius);
+  background: var(--panel);
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+}
+
+.backup-settings-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 14px 18px;
+  background: var(--panel-soft);
+  cursor: pointer;
+  font-size: 13px;
+  font-weight: 700;
+  user-select: none;
+  transition: background 0.2s ease;
+  border-bottom: 1px solid var(--line-soft);
+}
+
+.backup-settings-header:hover {
+  background: var(--line-soft);
+}
+
+.accordion-arrow {
+  font-size: 11px;
+  color: var(--muted);
+  transition: transform 0.3s ease;
+}
+
+.backup-settings-header.active .accordion-arrow {
+  transform: rotate(180deg);
+}
+
+.backup-settings-body {
+  padding: 16px;
+  background: var(--panel);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.setting-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 16px;
+}
+
+.setting-label {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.setting-label strong {
+  font-size: 13px;
+  color: var(--text);
+  font-weight: 600;
+}
+
+.setting-label span {
+  font-size: 11px;
+  color: var(--muted);
+}
+
+.setting-divider {
+  height: 1px;
+  background: var(--line-soft);
+}
+
+/* 토글 스위치 3D 입체 디자인 */
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+  flex-shrink: 0;
+}
+
+.switch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--panel-strong);
+  transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 34px;
+  box-shadow: inset 0 2px 4px rgba(0,0,0,0.1);
+}
+
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: .3s cubic-bezier(0.4, 0, 0.2, 1);
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0,0,0,0.2);
+}
+
+input:checked + .slider {
+  background-color: #6366f1;
+}
+
+input:focus + .slider {
+  box-shadow: 0 0 1px #6366f1;
+}
+
+input:checked + .slider:before {
+  transform: translateX(22px);
+}
+
+/* 노션 입력 필드 */
+.notion-config-inputs {
+  border-top: 1px dashed var(--line-soft);
+  margin-top: 4px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 10px;
+}
+
+.config-field:last-child {
+  margin-bottom: 0;
+}
+
+.field-title {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--muted);
+  letter-spacing: -0.01em;
+}
+
+.config-field input {
+  width: 100%;
+  height: 34px;
+  border: 1px solid var(--line-soft);
+  border-radius: var(--radius-sm);
+  background: var(--panel-soft);
+  color: var(--text);
+  font-size: 12px;
+  padding: 0 10px;
+  outline: none;
+  transition: all 0.2s ease;
+}
+
+.config-field input:focus {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+/* 통합 백업 실행 영역 */
+.backup-action-area {
+  padding: 14px 16px;
+  background: var(--panel-soft);
+  border-top: 1px solid var(--line-soft);
+  display: flex;
+  justify-content: center;
+}
+
+.backup-trigger-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  width: 100%;
+  height: 44px;
+  border: none;
+  border-radius: var(--radius);
+  background: linear-gradient(135deg, #6366f1, #4f46e5);
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(79, 70, 229, 0.3);
+  transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.backup-trigger-btn:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 20px rgba(79, 70, 229, 0.45);
+  background: linear-gradient(135deg, #4f46e5, #4338ca);
+}
+
+.backup-trigger-btn:active {
+  transform: translateY(0);
+}
+
+.backup-trigger-btn .btn-icon {
+  font-size: 16px;
+}
+
+/* 미니 알림 토스트 (Toast Message) */
+.toast-container {
+  position: fixed;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%) translateY(100px);
+  z-index: 9999;
+  background: rgba(15, 23, 42, 0.95);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: #ffffff;
+  padding: 12px 24px;
+  border-radius: 30px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 600;
+  transition: all 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toast-container.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+}
+
+.toast-icon {
+  font-size: 16px;
+}
+
+/* 다크모드 추가 보완 */
+body.dark-mode .google-login-button {
+  background: #1e293b;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+body.dark-mode .google-login-button:hover {
+  background: #0f172a;
+}
+
+body.dark-mode .calendar-event-card {
+  background: #1e293b;
+}
+
+body.dark-mode .toast-container {
+  background: rgba(255, 255, 255, 0.95);
+  color: #0f172a;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+}
