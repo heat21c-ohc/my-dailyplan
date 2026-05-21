@@ -498,7 +498,7 @@ async function onGoogleLinked() {
       handleAuthExpired();
     } else {
       console.error("post-login sync error:", e);
-      showToast("동기화 중 문제가 발생했습니다.", "warning");
+      showToast(`동기화 실패: ${e.message || "오류"}`, "warning");
     }
   }
 }
@@ -604,6 +604,33 @@ function applyRemoteData(remote) {
   });
 }
 
+async function buildGoogleApiError(response, fallbackMessage) {
+  let detail = "";
+  try {
+    const body = await response.json();
+    const error = body && body.error ? body.error : null;
+    const reason = error && Array.isArray(error.errors) && error.errors[0] ? error.errors[0].reason : "";
+    const message = error && error.message ? error.message : "";
+    detail = [reason, message].filter(Boolean).join(" / ");
+  } catch {
+    try {
+      detail = await response.text();
+    } catch {
+      detail = "";
+    }
+  }
+
+  let hint = fallbackMessage;
+  if (response.status === 403) {
+    hint = "Drive API 권한 또는 Google Cloud 설정을 확인해 주세요.";
+  } else if (response.status === 400) {
+    hint = "Drive API 요청 형식 또는 OAuth 설정을 확인해 주세요.";
+  }
+
+  const suffix = detail ? ` (${response.status}: ${detail})` : ` (${response.status})`;
+  return new Error(`${hint}${suffix}`);
+}
+
 /* 동기화 파일 ID 확보 (캐시 검증, 검색, 없으면 생성) */
 async function ensureSyncFile() {
   if (cloudConfig.syncFileId) {
@@ -614,6 +641,8 @@ async function ensureSyncFile() {
     if (check.ok) {
       const meta = await check.json();
       if (!meta.trashed) return cloudConfig.syncFileId;
+    } else if (check.status !== 404) {
+      throw await buildGoogleApiError(check, "동기화 파일 확인에 실패했습니다.");
     }
     cloudConfig.syncFileId = "";
   }
@@ -630,6 +659,8 @@ async function ensureSyncFile() {
       saveCloudConfig();
       return cloudConfig.syncFileId;
     }
+  } else {
+    throw await buildGoogleApiError(searchRes, "동기화 파일 검색에 실패했습니다.");
   }
 
   const boundary = "dpsync" + Date.now();
@@ -651,7 +682,7 @@ async function ensureSyncFile() {
     body: multipart
   });
   if (createRes.status === 401) throw { status: 401 };
-  if (!createRes.ok) throw new Error("동기화 파일 생성에 실패했습니다.");
+  if (!createRes.ok) throw await buildGoogleApiError(createRes, "동기화 파일 생성에 실패했습니다.");
   const created = await createRes.json();
   cloudConfig.syncFileId = created.id;
   saveCloudConfig();
@@ -683,7 +714,7 @@ async function uploadSyncContent(fileId, payload) {
     body: JSON.stringify(payload)
   });
   if (res.status === 401) throw { status: 401 };
-  if (!res.ok) throw new Error("동기화 업로드에 실패했습니다.");
+  if (!res.ok) throw await buildGoogleApiError(res, "동기화 업로드에 실패했습니다.");
 }
 
 /* pull: 원격이 더 최신이면 로컬을 갱신, 아니면 로컬을 push */

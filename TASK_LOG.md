@@ -43,6 +43,14 @@
 
 ## Done
 
+- ID: DP-038
+  담당: 멀린
+  상태: Done
+  범위: Drive 동기화 파일 생성 실패 원인 표시 개선
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, Drive 파일 확인/검색/생성/업로드 실패 시 Google API status와 상세 메시지를 토스트에 표시하도록 개선
+  리스크/메모: 실제 원인은 다음 재시도 시 표시되는 400/403 상세 메시지로 확정 가능. 가장 유력한 원인은 Google Cloud에서 Drive API 미활성화, OAuth 동의화면/스코프 불일치, 기존 로그인 토큰에 drive.file 권한 미포함 중 하나.
+
 - ID: DP-037
   담당: 멀린
   상태: Done
