@@ -442,3 +442,12 @@
   4. 캘린더 임베드는 사용자가 해당 브라우저에서 본인 구글 계정에 로그인되어 있어야 일정이 표시됨(비공개 캘린더 특성).
 
 - [DP-036 개발 메모] 마운트된 작업폴더 파일은 셸 `sed -i`/`rm` 사용 금지. 셸 in-place 수정이 파일도구(Read/Write) 캐시와 어긋나 동기화 깨짐을 유발함(이번 세션에서 발생, 셸 채널 재기록으로 복구). 코드 수정은 파일도구(Write/Edit)로 일원화하고, 검증은 셸 node --check로만 수행 권장.
+
+- ID: DP-050
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets/Notion 백업 기능 설정 지원 마감 및 다음 작업 인수인계 기록
+  변경 파일: `TASK_LOG.md`
+  변경 내용: Cloudflare Worker, Notion OAuth 연결, 백업 버튼 흐름 설정이 현재 단계까지 완료되었고, 보스가 Notion connected 화면으로 연결 성공을 확인함. 백업되는 형식은 다음 작업에서 다시 설계하기로 결정.
+  검증 결과: `git status --short` 기준 기능 파일의 미커밋 변경 없음. Notion 연결 결과 화면에서 "Notion connected" 확인. Worker `/health`는 보스 화면에서 `{"ok":true}` 확인됨.
+  리스크/메모: 현재 백업 형식은 최종 확정이 아니며, 다음 작업에서 Google Sheets/Notion 양쪽의 날짜별 보기 방식과 항목 배치 규칙을 재정의해야 함. 대화 중 노션 Client Secret이 노출되었으므로 Cloudflare 설정 완료 후 Notion integration secret 재발급 권장.
