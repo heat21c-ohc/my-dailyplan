@@ -19,6 +19,14 @@
   리스크/메모:
 ```
 
+## Checkpoints
+
+- 날짜: 2026-05-21
+  이름: `checkpoint-2026-05-21-daily-plan-layout`
+  기준 커밋: `1b13c09 chore: checkpoint daily plan layout`
+  목적: Daily Plan 레이아웃, 기본 기능, 협업 문서, 작업 로그를 포함한 복귀 기준점
+  복귀 참고: `git checkout checkpoint-2026-05-21-daily-plan-layout`
+
 ## Backlog
 
 - ID: DP-008
