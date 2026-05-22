@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-060
+  담당: 멀린
+  상태: Done
+  범위: Notion Worker 배포 버전 확인 및 부분 실패 응답 개선
+  변경 파일: `app.js`, `worker/notion-backup-worker.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `node --check worker/notion-backup-worker.js` 통과, `git diff --check` 통과
+  리스크/메모: Notion DB는 생성되지만 앱에 실패가 뜨는 문제의 원인 확인을 위해 Worker `/health`에 build 값을 추가하고, 행별 생성 실패를 상세 응답하도록 개선. 앱은 `failedCount`가 있으면 성공으로 오해하지 않고 상세 실패 메시지를 표시함. 실제 반영은 Cloudflare Worker 재배포 필요.
+
 - ID: DP-059
   담당: 멀린
   상태: Done

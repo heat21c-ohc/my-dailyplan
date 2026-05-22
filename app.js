@@ -1567,6 +1567,10 @@ async function backupCurrentPlanToNotion() {
 
     const result = await res.json().catch(() => ({}));
     if (!res.ok) throw new Error(result.error || `Notion backup failed (${res.status})`);
+    if (result.failedCount) {
+      const firstFailure = result.failed && result.failed[0] ? `: ${result.failed[0].error}` : "";
+      throw new Error(`${result.error || "Notion backup partially failed"}${firstFailure}`);
+    }
 
     clearBackedUpCompletedItems();
     saveState();

@@ -1,4 +1,5 @@
 const NOTION_VERSION = "2022-06-28";
+const WORKER_BUILD = "2026-05-22-dp059-stable-db";
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -393,12 +394,32 @@ async function handleNotionBackup(request, env) {
 
   const databaseId = await ensureArchiveDatabase(saved.accessToken, saved, env, userId);
   const created = [];
+  const failed = [];
   for (const record of records) {
-    created.push(await createDatabaseRecord(saved.accessToken, databaseId, record));
+    try {
+      created.push(await createDatabaseRecord(saved.accessToken, databaseId, record));
+    } catch (error) {
+      failed.push({
+        section: record.section,
+        itemNo: record.itemNo,
+        error: error.message || "Unknown error"
+      });
+    }
+  }
+
+  if (failed.length) {
+    return json({
+      error: "Some Notion records failed",
+      databaseId,
+      createdCount: created.length,
+      failedCount: failed.length,
+      failed
+    }, { status: 207, headers: corsHeaders });
   }
 
   return json({
     ok: true,
+    build: WORKER_BUILD,
     databaseId,
     count: created.length,
     url: created[0]?.url
@@ -411,7 +432,7 @@ export default {
 
     try {
       const url = new URL(request.url);
-      if (url.pathname === "/health") return json({ ok: true });
+      if (url.pathname === "/health") return json({ ok: true, build: WORKER_BUILD });
       if (url.pathname === "/auth/notion/start") return handleNotionStart(request, env);
       if (url.pathname === "/auth/notion/callback") return handleNotionCallback(request, env);
       if (url.pathname === "/backup/notion" && request.method === "POST") return handleNotionBackup(request, env);
