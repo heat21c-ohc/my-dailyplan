@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-059
+  담당: 멀린
+  상태: Done
+  범위: Notion DB 백업 실패 응답 및 중복 DB 생성 방지
+  변경 파일: `worker/notion-backup-worker.js`, `worker/README.md`, `TASK_LOG.md`
+  검증: `node --check worker/notion-backup-worker.js` 통과, `git diff --check` 통과
+  리스크/메모: Notion DB 행 일부 생성 후 실패 메시지가 나와 프론트 정리 로직이 실행되지 않는 문제를 수정. `-` 또는 비날짜 값은 Notion date 속성에 넣지 않도록 변경하고, 재연결 시 기존 databaseId를 보존하거나 같은 상위 페이지의 `Daily Plan Archive DB`를 찾아 재사용하도록 수정. 실제 반영은 Cloudflare Worker 별도 배포 필요.
+
 - ID: DP-058
   담당: 멀린
   상태: Done

@@ -149,11 +149,14 @@ function parseBackupItem(value, endLabel) {
 
 function parseNotionDate(value) {
   const text = normalizeText(value);
+  if (!text || text === "-") return null;
   const dateTimeMatch = text.match(/^(\d{4}-\d{2}-\d{2})-(\d{2}):(\d{2})$/);
   if (dateTimeMatch) return `${dateTimeMatch[1]}T${dateTimeMatch[2]}:${dateTimeMatch[3]}:00+09:00`;
+  const isoDateTimeMatch = text.match(/^(\d{4}-\d{2}-\d{2})T(\d{2}):(\d{2})/);
+  if (isoDateTimeMatch) return `${isoDateTimeMatch[1]}T${isoDateTimeMatch[2]}:${isoDateTimeMatch[3]}:00+09:00`;
   const dateMatch = text.match(/^\d{4}-\d{2}-\d{2}$/);
   if (dateMatch) return text;
-  return text || null;
+  return null;
 }
 
 function makeRecord(plan, section, data) {
@@ -230,6 +233,13 @@ function buildDatabaseSchema(parentPageId) {
 async function ensureArchiveDatabase(token, saved, env, userId) {
   if (saved.databaseId) return saved.databaseId;
 
+  const existingDatabaseId = await findArchiveDatabase(token, saved.parentPageId);
+  if (existingDatabaseId) {
+    saved.databaseId = existingDatabaseId;
+    await env.DAILY_PLAN_USERS.put(`notion:${userId}`, JSON.stringify(saved));
+    return existingDatabaseId;
+  }
+
   const database = await callNotion(token, "/databases", {
     method: "POST",
     body: JSON.stringify(buildDatabaseSchema(saved.parentPageId))
@@ -238,6 +248,36 @@ async function ensureArchiveDatabase(token, saved, env, userId) {
   saved.databaseId = database.id;
   await env.DAILY_PLAN_USERS.put(`notion:${userId}`, JSON.stringify(saved));
   return database.id;
+}
+
+function normalizeNotionId(value) {
+  return normalizeText(value).replace(/-/g, "");
+}
+
+function getTitlePlainText(item) {
+  const title = item && Array.isArray(item.title) ? item.title : [];
+  return title.map((part) => part.plain_text || "").join("");
+}
+
+async function findArchiveDatabase(token, parentPageId) {
+  const result = await callNotion(token, "/search", {
+    method: "POST",
+    body: JSON.stringify({
+      query: "Daily Plan Archive DB",
+      filter: { property: "object", value: "database" },
+      page_size: 25
+    })
+  });
+
+  const targetParent = normalizeNotionId(parentPageId);
+  const database = (result.results || []).find((item) => (
+    item.object === "database"
+    && getTitlePlainText(item) === "Daily Plan Archive DB"
+    && item.parent
+    && item.parent.type === "page_id"
+    && normalizeNotionId(item.parent.page_id) === targetParent
+  ));
+  return database ? database.id : "";
 }
 
 function buildRecordTitle(record) {
@@ -307,11 +347,15 @@ async function handleNotionCallback(request, env) {
   const state = JSON.parse(atob(rawState));
   const token = await exchangeNotionCode(env, code);
   const userSecretHash = await sha256(state.userSecret);
+  const existingRaw = await env.DAILY_PLAN_USERS.get(`notion:${state.userId}`);
+  const existing = existingRaw ? JSON.parse(existingRaw) : {};
+  const sameParent = normalizeNotionId(existing.parentPageId) === normalizeNotionId(state.parentPageId);
 
   await env.DAILY_PLAN_USERS.put(`notion:${state.userId}`, JSON.stringify({
     accessToken: token.access_token,
     workspaceId: token.workspace_id,
     parentPageId: state.parentPageId,
+    databaseId: sameParent ? existing.databaseId : "",
     userSecretHash,
     connectedAt: new Date().toISOString()
   }));
