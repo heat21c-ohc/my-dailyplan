@@ -255,6 +255,35 @@ function saveState() {
   scheduleCloudSync(); /* 로그인 상태면 드라이브로 자동 업로드 예약 */
 }
 
+function resetStateForCurrentDate() {
+  state.todos = [];
+  state.timeline = [];
+  state.editors = {};
+  state.importantDone = { important1: false, important2: false, important3: false };
+  ensureRows("todos", DEFAULT_TODO_ROWS);
+  ensureRows("timeline", DEFAULT_TIMELINE_ROWS);
+}
+
+function clearLocalPlanData() {
+  const keysToRemove = [];
+  for (let i = 0; i < localStorage.length; i += 1) {
+    const key = localStorage.key(i);
+    if (key && key.startsWith(STORAGE_KEY_PREFIX)) keysToRemove.push(key);
+  }
+
+  keysToRemove.forEach((key) => localStorage.removeItem(key));
+  localStorage.removeItem(LEGACY_STORAGE_KEY);
+  localStorage.removeItem(LOCAL_MODIFIED_KEY);
+  localStorage.removeItem(AUTO_SHEETS_BACKUP_KEY);
+  window.clearTimeout(cloudSyncTimer);
+  window.clearTimeout(saveTimer);
+  resetStateForCurrentDate();
+  renderList("todos");
+  renderList("timeline");
+  hydrateEditors();
+  hydrateImportantCheckboxes();
+}
+
 function scheduleSave() {
   window.clearTimeout(saveTimer);
   saveTimer = window.setTimeout(saveState, 120);
@@ -425,6 +454,27 @@ function localDateTime() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 16);
+}
+
+function padTwoDigits(value) {
+  return String(value).padStart(2, "0");
+}
+
+function formatBackupDateTime(value) {
+  if (!value) return "";
+
+  if (value instanceof Date && !Number.isNaN(value.getTime())) {
+    return [
+      value.getFullYear(),
+      padTwoDigits(value.getMonth() + 1),
+      padTwoDigits(value.getDate())
+    ].join("-") + `-${padTwoDigits(value.getHours())}:${padTwoDigits(value.getMinutes())}`;
+  }
+
+  const text = String(value).trim();
+  const match = text.match(/^(\d{4}-\d{2}-\d{2})(?:T|\s|-)(\d{2}):(\d{2})/);
+  if (match) return `${match[1]}-${match[2]}:${match[3]}`;
+  return text;
 }
 
 function makeId() {
@@ -823,7 +873,8 @@ async function onGoogleLinked() {
   try {
     await fetchUserEmail();
     embedCalendar();
-    await pullFromDrive();
+    showToast("Google Drive에서 데이터를 불러오는 중입니다.", "info");
+    await pullFromDrive({ preferRemote: true });
   } catch (e) {
     if (e && e.status === 401) {
       handleAuthExpired();
@@ -868,17 +919,20 @@ function disconnectGoogle() {
   googleAccessToken = null;
   userEmail = null;
   sessionStorage.removeItem("google_access_token");
+  clearLocalPlanData();
   updateGoogleUI(false);
   const frame = document.querySelector("#calendarFrame");
   if (frame) frame.src = "";
   if (token) {
     try {
       google.accounts.oauth2.revokeToken(token, () => {
-        showToast("구글 계정 연동이 해제되었습니다.", "success");
+        showToast("구글 계정 연동을 해제하고 로컬 데이터를 비웠습니다.", "success");
       });
     } catch (e) {
       /* 취소 실패해도 로컬 상태는 이미 초기화됨 */
     }
+  } else {
+    showToast("로그아웃 상태로 전환하고 로컬 데이터를 비웠습니다.", "success");
   }
 }
 
@@ -1055,16 +1109,16 @@ async function uploadSyncContent(fileId, payload) {
 }
 
 /* pull: 원격이 더 최신이면 로컬을 갱신, 아니면 로컬을 push */
-async function pullFromDrive() {
+async function pullFromDrive(options = {}) {
   if (!googleAccessToken) return;
   const fileId = await ensureSyncFile();
   const remote = await downloadSyncContent(fileId);
   const localMod = Number(localStorage.getItem(LOCAL_MODIFIED_KEY) || 0);
   const remoteMod = remote && remote.__meta ? Number(remote.__meta.lastModified || 0) : 0;
 
-  if (remote && remoteMod > localMod) {
+  if (remote && (options.preferRemote || remoteMod > localMod)) {
     applyRemoteData(remote);
-    localStorage.setItem(LOCAL_MODIFIED_KEY, String(remoteMod));
+    localStorage.setItem(LOCAL_MODIFIED_KEY, String(remoteMod || Date.now()));
     reloadCurrentView();
     showToast("최신 데이터를 불러왔습니다.", "success");
   } else {
@@ -1147,7 +1201,7 @@ async function backupCurrentPlanToSheets(options = {}) {
       return;
     }
 
-    await appendArchiveSheetRows(sheetId, rows);
+    await upsertArchiveRows(sheetId, rows);
     clearBackedUpCompletedItems();
     saveState();
     renderList("todos");
@@ -1158,7 +1212,7 @@ async function backupCurrentPlanToSheets(options = {}) {
     if (options.auto) {
       localStorage.setItem(AUTO_SHEETS_BACKUP_KEY, backupDate);
     }
-    updateBackupStatus("Google Sheets 백업 완료: 오늘 기록 1행 저장");
+    updateBackupStatus(`Google Sheets 백업 완료: 오늘 기록 ${rows.length}행 저장/갱신`);
     if (!options.auto) showToast("Google Sheets 백업 완료", "success");
   } catch (e) {
     if (e && e.status === 401) handleAuthExpired();
@@ -1244,15 +1298,30 @@ async function ensureArchiveHeader(sheetId) {
 async function upsertArchiveRows(sheetId, rowsByDate) {
   await ensureArchiveHeader(sheetId);
   const dateIndex = await getArchiveSheetDateIndex(sheetId);
-  const rowsToAppend = [];
+  const rowsByBackupDate = new Map();
 
   for (const row of rowsByDate) {
-    const targetRow = dateIndex.get(row[0]);
-    if (targetRow) await updateArchiveSheetRow(sheetId, targetRow, row);
-    else rowsToAppend.push(row);
+    const backupDate = row[0];
+    if (!rowsByBackupDate.has(backupDate)) rowsByBackupDate.set(backupDate, []);
+    rowsByBackupDate.get(backupDate).push(row);
   }
 
-  if (rowsToAppend.length) await appendArchiveSheetRows(sheetId, rowsToAppend);
+  for (const [backupDate, rows] of rowsByBackupDate) {
+    const existingRows = dateIndex.get(backupDate) || [];
+    const rowsToAppend = [];
+
+    for (let i = 0; i < rows.length; i += 1) {
+      const targetRow = existingRows[i];
+      if (targetRow) await updateArchiveSheetRow(sheetId, targetRow, rows[i]);
+      else rowsToAppend.push(rows[i]);
+    }
+
+    if (existingRows.length > rows.length) {
+      await clearArchiveSheetRows(sheetId, existingRows.slice(rows.length));
+    }
+
+    if (rowsToAppend.length) await appendArchiveSheetRows(sheetId, rowsToAppend);
+  }
 }
 
 async function getArchiveSheetDateIndex(sheetId) {
@@ -1267,13 +1336,16 @@ async function getArchiveSheetDateIndex(sheetId) {
   const index = new Map();
   (data.values || []).forEach((row, i) => {
     const date = row && row[0];
-    if (date && date !== "Date") index.set(date, i + 1);
+    if (date && date !== "Backup Date") {
+      if (!index.has(date)) index.set(date, []);
+      index.get(date).push(i + 1);
+    }
   });
   return index;
 }
 
 async function updateArchiveSheetRow(sheetId, rowNumber, row) {
-  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:H${rowNumber}`);
+  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:I${rowNumber}`);
   const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`, {
     method: "PUT",
     headers: {
@@ -1284,6 +1356,27 @@ async function updateArchiveSheetRow(sheetId, rowNumber, row) {
   });
   if (res.status === 401) throw { status: 401 };
   if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 행 업데이트에 실패했습니다.");
+}
+
+async function clearArchiveSheetRows(sheetId, rowNumbers) {
+  if (!rowNumbers.length) return;
+  const data = rowNumbers.map((rowNumber) => ({
+    range: `'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:I${rowNumber}`,
+    values: [["", "", "", "", "", "", "", "", ""]]
+  }));
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchUpdate`, {
+    method: "POST",
+    headers: {
+      "Authorization": `Bearer ${googleAccessToken}`,
+      "Content-Type": "application/json"
+    },
+    body: JSON.stringify({
+      valueInputOption: "RAW",
+      data
+    })
+  });
+  if (res.status === 401) throw { status: 401 };
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 기존 행 정리에 실패했습니다.");
 }
 
 async function appendArchiveSheetRows(sheetId, rows) {
@@ -1302,7 +1395,7 @@ async function appendArchiveSheetRows(sheetId, rows) {
 
 function buildDailyArchiveRows(backupDate, planDate, plan) {
   const editors = plan && plan.editors && typeof plan.editors === "object" ? plan.editors : {};
-  const updatedAt = new Date().toISOString();
+  const updatedAt = formatBackupDateTime(new Date());
   const importantItems = [];
 
   ["important1", "important2", "important3"].forEach((key) => {
@@ -1312,67 +1405,72 @@ function buildDailyArchiveRows(backupDate, planDate, plan) {
     }
   });
 
-  const todoText = buildTodoBackupCell(plan.todos || []);
-  const timelineText = buildTimelineBackupCell(plan.timeline || []);
+  const todoItems = buildTodoBackupCells(plan.todos || []);
+  const timelineItems = buildTimelineBackupCells(plan.timeline || []);
   const memoText = htmlToText(editors.memo);
   const thanksText = htmlToText(editors.thanks);
   const summaryText = htmlToText(editors.summary);
 
-  const hasBackupData = importantItems.length || todoText || timelineText || memoText || thanksText || summaryText;
-  if (!hasBackupData) return [];
+  const rowCount = Math.max(
+    importantItems.length,
+    todoItems.length,
+    timelineItems.length,
+    memoText ? 1 : 0,
+    thanksText ? 1 : 0,
+    summaryText ? 1 : 0
+  );
+  if (!rowCount) return [];
 
-  return [[
+  return Array.from({ length: rowCount }, (_, index) => [
     backupDate,
     planDate,
-    importantItems.join("\n\n"),
-    todoText,
-    timelineText,
-    memoText,
-    thanksText,
-    summaryText,
-    updatedAt
-  ]];
+    importantItems[index] || "",
+    todoItems[index] || "",
+    timelineItems[index] || "",
+    index === 0 ? memoText : "",
+    index === 0 ? thanksText : "",
+    index === 0 ? summaryText : "",
+    index === 0 ? updatedAt : ""
+  ]);
 }
 
-function buildTodoBackupCell(rows) {
-  if (!Array.isArray(rows)) return "";
+function buildTodoBackupCells(rows) {
+  if (!Array.isArray(rows)) return [];
   return rows
     .filter((row) => row.end && row.task)
     .map((row, index) => [
       `#${index + 1}`,
       `내용: ${row.task}`,
-      `시작: ${row.start || "-"}`,
-      `완료: ${row.end}`
-    ].join("\n"))
-    .join("\n\n");
+      `시작: ${formatBackupDateTime(row.start) || "-"}`,
+      `완료: ${formatBackupDateTime(row.end)}`
+    ].join("\n"));
 }
 
-function buildTimelineBackupCell(rows) {
-  if (!Array.isArray(rows)) return "";
+function buildTimelineBackupCells(rows) {
+  if (!Array.isArray(rows)) return [];
   return rows
     .filter((row) => row.end && row.task)
     .map((row, index) => [
       `#${index + 1}`,
       `내용: ${row.task}`,
-      `시작: ${row.start || "-"}`,
-      `마침: ${row.end}`
-    ].join("\n"))
-    .join("\n\n");
+      `시작: ${formatBackupDateTime(row.start) || "-"}`,
+      `마침: ${formatBackupDateTime(row.end)}`
+    ].join("\n"));
 }
 
 function buildBackupPlanPayload(backupDate, planDate, plan) {
-  const row = buildDailyArchiveRows(backupDate, planDate, plan)[0];
-  if (!row) return null;
+  const rows = buildDailyArchiveRows(backupDate, planDate, plan);
+  if (!rows.length) return null;
   return {
-    backupDate: row[0],
-    planDate: row[1],
-    important: row[2],
-    todos: row[3],
-    timeline: row[4],
-    memo: row[5],
-    thanks: row[6],
-    summary: row[7],
-    updatedAt: row[8]
+    backupDate,
+    planDate,
+    important: rows.map((row) => row[2]).filter(Boolean).join("\n\n"),
+    todos: rows.map((row) => row[3]).filter(Boolean).join("\n\n"),
+    timeline: rows.map((row) => row[4]).filter(Boolean).join("\n\n"),
+    memo: rows[0][5],
+    thanks: rows[0][6],
+    summary: rows[0][7],
+    updatedAt: rows[0][8]
   };
 }
 

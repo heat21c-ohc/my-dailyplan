@@ -49,6 +49,38 @@
 
 ## Done
 
+- ID: DP-054
+  담당: 멀린
+  상태: Done
+  범위: Google 로그아웃 시 로컬 계획 데이터 삭제 및 재로그인 자동 동기화 안정화
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, `pullFromDrive`/`disconnectGoogle` 변경 위치 확인
+  리스크/메모: 로그아웃 시 날짜별 계획 localStorage, legacy 저장값, 로컬 수정 시각, 자동 Sheets 백업 기록을 삭제하고 화면을 빈 기본 행으로 초기화하도록 변경. Google Drive/Sheets 파일 ID 캐시와 테마 설정은 유지. 재로그인 시 `pullFromDrive({ preferRemote: true })`로 원격 데이터를 우선 불러오도록 변경.
+
+- ID: DP-053
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets 백업을 항목별 행 분리 형식으로 변경
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 기존 함수명 잔존 여부 `rg` 확인
+  리스크/메모: 첨부 이미지 기준으로 같은 날짜의 완료 항목을 여러 행에 나눠 저장하도록 변경. 같은 Backup Date의 기존 행은 앞에서부터 갱신하고, 기존 행이 더 많으면 남는 행은 비움. 현재 Google Sheets 백업은 Values API와 `htmlToText` 기반이라 굵게/밑줄/목록 같은 에디터 서식은 보존되지 않고 일반 텍스트와 줄바꿈만 저장됨. 서식 보존은 HTML 파싱 후 Sheets `textFormatRuns` 또는 Notion rich_text 변환을 별도 구현해야 가능.
+
+- ID: DP-052
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets 백업 시간 표시 형식 변경
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과
+  리스크/메모: 보스 요청에 따라 백업 시트에 저장되는 시간 문자열을 `2026-05-22-03:48` 형식으로 통일. TO DO/TIME LINE의 시작/완료/마침 값과 `Updated At` 백업 시각 모두 같은 표시 형식을 사용.
+
+- ID: DP-051
+  담당: 멀린
+  상태: Done
+  범위: 최신 GitHub 프로젝트 반영 후 Google Sheets 백업 중복 저장 방지
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 변경 범위가 Sheets 백업 upsert 연결과 작업 로그 기록으로 제한됨을 확인
+  리스크/메모: `git pull --ff-only origin main`으로 최신 main 반영 후 `TEAM_HANDOFF_GUIDE.md`, `TASK_LOG.md`, `PROJECT_PLAN.md`, `AGENT_RR.md` 확인. Sheets 백업은 같은 Backup Date가 있으면 기존 행을 갱신하고 없으면 새 행을 추가하도록 변경. 실제 Google Sheets API 동작은 로그인된 브라우저와 Sheets 권한이 있는 배포 환경에서 최종 확인 필요.
+
 - ID: DP-049
   담당: 멀린
   상태: Done
