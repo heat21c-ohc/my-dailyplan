@@ -1413,7 +1413,7 @@ function buildDailyArchiveRows(backupDate, planDate, plan) {
     index === 0 ? memoText : "",
     index === 0 ? thanksText : "",
     index === 0 ? summaryText : "",
-    index === 0 ? updatedAt : ""
+    updatedAt
   ]);
 }
 

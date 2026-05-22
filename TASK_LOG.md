@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-056
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets 백업 분리 행의 Updated At 누락 수정
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과
+  리스크/메모: 항목별 행 분리 백업에서 첫 번째 행에만 Updated At이 채워지고 후속 행은 빈칸으로 저장되는 문제를 수정. 이제 같은 백업으로 생성되는 모든 행에 동일한 백업 시각이 들어감.
+
 - ID: DP-055
   담당: 멀린
   상태: Done
