@@ -1447,6 +1447,17 @@ function buildBackupPlanPayload(backupDate, planDate, plan) {
   return {
     backupDate,
     planDate,
+    rows: rows.map((row) => ({
+      backupDate: row[0],
+      planDate: row[1],
+      important: row[2],
+      todo: row[3],
+      timeline: row[4],
+      memo: row[5],
+      thanks: row[6],
+      summary: row[7],
+      updatedAt: row[8]
+    })),
     important: rows.map((row) => row[2]).filter(Boolean).join("\n\n"),
     todos: rows.map((row) => row[3]).filter(Boolean).join("\n\n"),
     timeline: rows.map((row) => row[4]).filter(Boolean).join("\n\n"),

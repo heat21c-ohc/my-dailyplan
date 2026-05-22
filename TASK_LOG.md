@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-057
+  담당: 멀린
+  상태: Done
+  범위: Notion 백업 payload 및 Worker 페이지 생성 형식 개선
+  변경 파일: `app.js`, `worker/notion-backup-worker.js`, `worker/README.md`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `node --check worker/notion-backup-worker.js` 통과, `git diff --check` 통과
+  리스크/메모: 프론트는 기존 문자열 필드를 유지하면서 `plan.rows` 구조화 payload를 추가. Worker는 Notion 페이지를 Backup Info, Important, TO DO LIST, TIME LINE, MEMO, THANKS GOD, SUMMARY 섹션과 bullet block으로 생성하도록 변경. GitHub Pages 배포는 `app.js`만 반영하며, Worker 형식 변경은 Cloudflare Worker 별도 배포가 필요할 수 있음.
+
 - ID: DP-056
   담당: 멀린
   상태: Done

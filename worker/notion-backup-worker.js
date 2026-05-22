@@ -97,31 +97,105 @@ async function callNotion(token, path, init = {}) {
   return res.json();
 }
 
-function textBlock(label, value) {
-  const content = value && String(value).trim() ? String(value).trim() : "-";
+function normalizeText(value) {
+  return value && String(value).trim() ? String(value).trim() : "";
+}
+
+function richText(value, annotations = {}) {
+  const content = normalizeText(value) || "-";
+  const hasAnnotations = Object.keys(annotations).length > 0;
+  const chunks = [];
+  for (let i = 0; i < content.length; i += 1900) {
+    const chunk = {
+      type: "text",
+      text: { content: content.slice(i, i + 1900) }
+    };
+    if (hasAnnotations) chunk.annotations = annotations;
+    chunks.push(chunk);
+  }
+  return chunks;
+}
+
+function headingBlock(text) {
   return {
     object: "block",
-    type: "paragraph",
-    paragraph: {
-      rich_text: [
-        { type: "text", text: { content: `${label}: ` }, annotations: { bold: true } },
-        { type: "text", text: { content } }
-      ]
-    }
+    type: "heading_2",
+    heading_2: { rich_text: richText(text) }
   };
 }
 
+function paragraphBlock(value) {
+  return {
+    object: "block",
+    type: "paragraph",
+    paragraph: { rich_text: richText(value) }
+  };
+}
+
+function bulletBlock(value) {
+  return {
+    object: "block",
+    type: "bulleted_list_item",
+    bulleted_list_item: { rich_text: richText(value) }
+  };
+}
+
+function dividerBlock() {
+  return { object: "block", type: "divider", divider: {} };
+}
+
+function getPlanRows(plan) {
+  if (Array.isArray(plan.rows) && plan.rows.length) return plan.rows;
+  return [{
+    backupDate: plan.backupDate,
+    planDate: plan.planDate,
+    important: plan.important,
+    todo: plan.todos,
+    timeline: plan.timeline,
+    memo: plan.memo,
+    thanks: plan.thanks,
+    summary: plan.summary,
+    updatedAt: plan.updatedAt
+  }];
+}
+
+function collectItems(rows, key) {
+  return rows.map((row) => normalizeText(row[key])).filter(Boolean);
+}
+
+function addSection(children, title, items) {
+  if (!items.length) return;
+  children.push(headingBlock(title));
+  items.forEach((item) => children.push(bulletBlock(item)));
+}
+
 function buildPageChildren(plan) {
-  return [
-    textBlock("Backup Date", plan.backupDate),
-    textBlock("Plan Date", plan.planDate),
-    textBlock("Important", plan.important),
-    textBlock("TO DO LIST", plan.todos),
-    textBlock("TIME LINE", plan.timeline),
-    textBlock("MEMO", plan.memo),
-    textBlock("THANKS GOD", plan.thanks),
-    textBlock("SUMMARY", plan.summary)
+  const rows = getPlanRows(plan);
+  const updatedAt = normalizeText(plan.updatedAt) || normalizeText(rows[0]?.updatedAt);
+  const children = [
+    headingBlock("Backup Info"),
+    paragraphBlock([
+      `Backup Date: ${plan.backupDate || "-"}`,
+      `Plan Date: ${plan.planDate || "-"}`,
+      `Updated At: ${updatedAt || "-"}`
+    ].join("\n")),
+    dividerBlock()
   ];
+
+  addSection(children, "Important", collectItems(rows, "important"));
+  addSection(children, "TO DO LIST", collectItems(rows, "todo"));
+  addSection(children, "TIME LINE", collectItems(rows, "timeline"));
+  addSection(children, "MEMO", collectItems(rows, "memo"));
+  addSection(children, "THANKS GOD", collectItems(rows, "thanks"));
+  addSection(children, "SUMMARY", collectItems(rows, "summary"));
+
+  return children.slice(0, 100);
+}
+
+function buildPageTitle(plan) {
+  const date = plan.planDate || plan.backupDate || "No Date";
+  const updatedAt = plan.updatedAt ? ` ${plan.updatedAt}` : "";
+  return `Daily Plan ${date}${updatedAt}`;
 }
 
 async function handleNotionStart(request, env) {
@@ -198,7 +272,7 @@ async function handleNotionBackup(request, env) {
       parent: { page_id: saved.parentPageId },
       properties: {
         title: {
-          title: [{ type: "text", text: { content: `Daily Plan ${plan.planDate || plan.backupDate}` } }]
+          title: [{ type: "text", text: { content: buildPageTitle(plan) } }]
         }
       },
       children: buildPageChildren(plan)
