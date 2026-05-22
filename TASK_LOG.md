@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-058
+  담당: 멀린
+  상태: Done
+  범위: Notion 백업을 문서형 페이지에서 데이터베이스 행 저장 방식으로 변경
+  변경 파일: `index.html`, `worker/notion-backup-worker.js`, `worker/README.md`, `TASK_LOG.md`
+  검증: `node --check worker/notion-backup-worker.js` 통과, `node --check app.js` 통과, `git diff --check` 통과
+  리스크/메모: 데이터 처리/검색 편의성을 위해 Notion 상위 백업 페이지 아래에 `Daily Plan Archive DB` 데이터베이스를 만들고, 완료 항목을 Section/Content/Start/End/Updated At 속성 행으로 누적 저장하도록 변경. 각 DB 행은 Notion 내부적으로 페이지지만 사용자는 표/필터/검색/정렬로 다룰 수 있음. 실제 반영은 Cloudflare Worker 별도 배포 필요.
+
 - ID: DP-057
   담당: 멀린
   상태: Done

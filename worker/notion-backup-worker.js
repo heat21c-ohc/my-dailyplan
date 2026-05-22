@@ -116,34 +116,6 @@ function richText(value, annotations = {}) {
   return chunks;
 }
 
-function headingBlock(text) {
-  return {
-    object: "block",
-    type: "heading_2",
-    heading_2: { rich_text: richText(text) }
-  };
-}
-
-function paragraphBlock(value) {
-  return {
-    object: "block",
-    type: "paragraph",
-    paragraph: { rich_text: richText(value) }
-  };
-}
-
-function bulletBlock(value) {
-  return {
-    object: "block",
-    type: "bulleted_list_item",
-    bulleted_list_item: { rich_text: richText(value) }
-  };
-}
-
-function dividerBlock() {
-  return { object: "block", type: "divider", divider: {} };
-}
-
 function getPlanRows(plan) {
   if (Array.isArray(plan.rows) && plan.rows.length) return plan.rows;
   return [{
@@ -159,43 +131,147 @@ function getPlanRows(plan) {
   }];
 }
 
-function collectItems(rows, key) {
-  return rows.map((row) => normalizeText(row[key])).filter(Boolean);
+function parseBackupItem(value, endLabel) {
+  const text = normalizeText(value);
+  const item = { itemNo: null, content: text, start: "", end: "" };
+  if (!text) return item;
+
+  text.split("\n").forEach((line) => {
+    const trimmed = line.trim();
+    const numberMatch = trimmed.match(/^#(\d+)/);
+    if (numberMatch) item.itemNo = Number(numberMatch[1]);
+    else if (trimmed.startsWith("내용:")) item.content = trimmed.slice(3).trim();
+    else if (trimmed.startsWith("시작:")) item.start = trimmed.slice(3).trim();
+    else if (trimmed.startsWith(`${endLabel}:`)) item.end = trimmed.slice(endLabel.length + 1).trim();
+  });
+  return item;
 }
 
-function addSection(children, title, items) {
-  if (!items.length) return;
-  children.push(headingBlock(title));
-  items.forEach((item) => children.push(bulletBlock(item)));
+function parseNotionDate(value) {
+  const text = normalizeText(value);
+  const dateTimeMatch = text.match(/^(\d{4}-\d{2}-\d{2})-(\d{2}):(\d{2})$/);
+  if (dateTimeMatch) return `${dateTimeMatch[1]}T${dateTimeMatch[2]}:${dateTimeMatch[3]}:00+09:00`;
+  const dateMatch = text.match(/^\d{4}-\d{2}-\d{2}$/);
+  if (dateMatch) return text;
+  return text || null;
 }
 
-function buildPageChildren(plan) {
+function makeRecord(plan, section, data) {
+  return {
+    backupDate: plan.backupDate,
+    planDate: plan.planDate,
+    updatedAt: data.updatedAt || plan.updatedAt,
+    section,
+    itemNo: data.itemNo || null,
+    content: data.content || "",
+    start: data.start || "",
+    end: data.end || ""
+  };
+}
+
+function buildNotionRecords(plan) {
   const rows = getPlanRows(plan);
-  const updatedAt = normalizeText(plan.updatedAt) || normalizeText(rows[0]?.updatedAt);
-  const children = [
-    headingBlock("Backup Info"),
-    paragraphBlock([
-      `Backup Date: ${plan.backupDate || "-"}`,
-      `Plan Date: ${plan.planDate || "-"}`,
-      `Updated At: ${updatedAt || "-"}`
-    ].join("\n")),
-    dividerBlock()
-  ];
+  const records = [];
 
-  addSection(children, "Important", collectItems(rows, "important"));
-  addSection(children, "TO DO LIST", collectItems(rows, "todo"));
-  addSection(children, "TIME LINE", collectItems(rows, "timeline"));
-  addSection(children, "MEMO", collectItems(rows, "memo"));
-  addSection(children, "THANKS GOD", collectItems(rows, "thanks"));
-  addSection(children, "SUMMARY", collectItems(rows, "summary"));
+  rows.forEach((row) => {
+    const common = { updatedAt: row.updatedAt || plan.updatedAt };
+    if (normalizeText(row.important)) {
+      records.push(makeRecord(plan, "Important", { ...common, content: row.important }));
+    }
+    if (normalizeText(row.todo)) {
+      records.push(makeRecord(plan, "TO DO LIST", { ...common, ...parseBackupItem(row.todo, "완료") }));
+    }
+    if (normalizeText(row.timeline)) {
+      records.push(makeRecord(plan, "TIME LINE", { ...common, ...parseBackupItem(row.timeline, "마침") }));
+    }
+    if (normalizeText(row.memo)) {
+      records.push(makeRecord(plan, "MEMO", { ...common, content: row.memo }));
+    }
+    if (normalizeText(row.thanks)) {
+      records.push(makeRecord(plan, "THANKS GOD", { ...common, content: row.thanks }));
+    }
+    if (normalizeText(row.summary)) {
+      records.push(makeRecord(plan, "SUMMARY", { ...common, content: row.summary }));
+    }
+  });
 
-  return children.slice(0, 100);
+  return records;
 }
 
-function buildPageTitle(plan) {
-  const date = plan.planDate || plan.backupDate || "No Date";
-  const updatedAt = plan.updatedAt ? ` ${plan.updatedAt}` : "";
-  return `Daily Plan ${date}${updatedAt}`;
+function buildDatabaseSchema(parentPageId) {
+  return {
+    parent: { page_id: parentPageId },
+    title: [{ type: "text", text: { content: "Daily Plan Archive DB" } }],
+    properties: {
+      Name: { title: {} },
+      "Backup Date": { date: {} },
+      "Plan Date": { date: {} },
+      Section: {
+        select: {
+          options: [
+            { name: "Important", color: "yellow" },
+            { name: "TO DO LIST", color: "blue" },
+            { name: "TIME LINE", color: "purple" },
+            { name: "MEMO", color: "gray" },
+            { name: "THANKS GOD", color: "green" },
+            { name: "SUMMARY", color: "orange" }
+          ]
+        }
+      },
+      "Item No": { number: { format: "number" } },
+      Content: { rich_text: {} },
+      Start: { date: {} },
+      End: { date: {} },
+      "Updated At": { date: {} }
+    }
+  };
+}
+
+async function ensureArchiveDatabase(token, saved, env, userId) {
+  if (saved.databaseId) return saved.databaseId;
+
+  const database = await callNotion(token, "/databases", {
+    method: "POST",
+    body: JSON.stringify(buildDatabaseSchema(saved.parentPageId))
+  });
+
+  saved.databaseId = database.id;
+  await env.DAILY_PLAN_USERS.put(`notion:${userId}`, JSON.stringify(saved));
+  return database.id;
+}
+
+function buildRecordTitle(record) {
+  const suffix = record.itemNo ? ` #${record.itemNo}` : "";
+  return `${record.planDate || record.backupDate || "No Date"} ${record.section}${suffix}`;
+}
+
+function buildRecordProperties(record) {
+  const properties = {
+    Name: { title: richText(buildRecordTitle(record)) },
+    "Backup Date": { date: record.backupDate ? { start: record.backupDate } : null },
+    "Plan Date": { date: record.planDate ? { start: record.planDate } : null },
+    Section: { select: { name: record.section } },
+    Content: { rich_text: richText(record.content) }
+  };
+
+  if (record.itemNo) properties["Item No"] = { number: record.itemNo };
+  const start = parseNotionDate(record.start);
+  if (start) properties.Start = { date: { start } };
+  const end = parseNotionDate(record.end);
+  if (end) properties.End = { date: { start: end } };
+  const updatedAt = parseNotionDate(record.updatedAt);
+  if (updatedAt) properties["Updated At"] = { date: { start: updatedAt } };
+  return properties;
+}
+
+async function createDatabaseRecord(token, databaseId, record) {
+  return callNotion(token, "/pages", {
+    method: "POST",
+    body: JSON.stringify({
+      parent: { database_id: databaseId },
+      properties: buildRecordProperties(record)
+    })
+  });
 }
 
 async function handleNotionStart(request, env) {
@@ -266,20 +342,23 @@ async function handleNotionBackup(request, env) {
     return json({ error: "Invalid user secret" }, { status: 403, headers: corsHeaders });
   }
 
-  const page = await callNotion(saved.accessToken, "/pages", {
-    method: "POST",
-    body: JSON.stringify({
-      parent: { page_id: saved.parentPageId },
-      properties: {
-        title: {
-          title: [{ type: "text", text: { content: buildPageTitle(plan) } }]
-        }
-      },
-      children: buildPageChildren(plan)
-    })
-  });
+  const records = buildNotionRecords(plan);
+  if (!records.length) {
+    return json({ error: "No backup records" }, { status: 400, headers: corsHeaders });
+  }
 
-  return json({ ok: true, pageId: page.id, url: page.url }, { headers: corsHeaders });
+  const databaseId = await ensureArchiveDatabase(saved.accessToken, saved, env, userId);
+  const created = [];
+  for (const record of records) {
+    created.push(await createDatabaseRecord(saved.accessToken, databaseId, record));
+  }
+
+  return json({
+    ok: true,
+    databaseId,
+    count: created.length,
+    url: created[0]?.url
+  }, { headers: corsHeaders });
 }
 
 export default {

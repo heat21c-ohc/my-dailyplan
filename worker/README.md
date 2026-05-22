@@ -35,13 +35,23 @@ https://daily-plan-backup-api.heat21c.workers.dev/auth/notion/callback
 
 ## 백업 형식
 
-`POST /backup/notion`은 Daily Plan 프론트에서 넘긴 `plan.rows` 배열을 기준으로 Notion 하위 페이지를 생성합니다.
+`POST /backup/notion`은 Daily Plan 프론트에서 넘긴 `plan.rows` 배열을 기준으로 Notion 데이터베이스에 행을 추가합니다.
 
-- 페이지 제목: `Daily Plan {Plan Date} {Updated At}`
-- 상단: Backup Date, Plan Date, Updated At
-- 섹션: Important, TO DO LIST, TIME LINE, MEMO, THANKS GOD, SUMMARY
-- 완료 항목은 섹션별 bullet block으로 저장
-- MEMO/THANKS/SUMMARY는 줄바꿈을 유지한 텍스트로 저장
+첫 백업 시 `parentPageId` 페이지 아래에 `Daily Plan Archive DB` 데이터베이스를 생성하고, 이후에는 같은 데이터베이스에 계속 누적 저장합니다.
+
+데이터베이스 속성:
+
+- `Name`: `{Plan Date} {Section} #{Item No}`
+- `Backup Date`: 백업 실행 날짜
+- `Plan Date`: Daily Plan 기준 날짜
+- `Section`: Important, TO DO LIST, TIME LINE, MEMO, THANKS GOD, SUMMARY
+- `Item No`: TO DO/TIME LINE 항목 번호
+- `Content`: 항목 내용
+- `Start`: 시작 날짜/시간 (date)
+- `End`: 완료/마침 날짜/시간 (date)
+- `Updated At`: 백업 시각 (date)
+
+Notion 데이터베이스의 각 행은 내부적으로 Notion 페이지이지만, 사용자는 데이터베이스 표/보드/캘린더/필터/검색 방식으로 다룰 수 있습니다.
 
 ## 배포 주의
 
