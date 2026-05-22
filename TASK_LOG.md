@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-062
+  담당: 멀린
+  상태: Done
+  범위: Notion Worker build 식별값 갱신 및 DB 404 재시도
+  변경 파일: `worker/notion-backup-worker.js`, `TASK_LOG.md`
+  검증: `node --check worker/notion-backup-worker.js` 통과, `git diff --check` 통과
+  리스크/메모: Cloudflare Worker 배포 버전 확인을 쉽게 하기 위해 build 값을 `2026-05-22-dp061-recover-db-id`로 갱신하고, 레코드 생성 중 DB 404가 발생하면 databaseId를 비우고 DB 재확보 후 1회 재시도하도록 변경. 실제 반영은 Cloudflare Worker 재배포 필요.
+
 - ID: DP-061
   담당: 멀린
   상태: Done

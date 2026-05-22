@@ -1,5 +1,5 @@
 const NOTION_VERSION = "2022-06-28";
-const WORKER_BUILD = "2026-05-22-dp059-stable-db";
+const WORKER_BUILD = "2026-05-22-dp061-recover-db-id";
 
 function json(data, init = {}) {
   return new Response(JSON.stringify(data), {
@@ -338,6 +338,11 @@ async function createDatabaseRecord(token, databaseId, record) {
   });
 }
 
+function isMissingDatabaseError(error) {
+  const message = error && error.message ? error.message : "";
+  return message.includes("Could not find database") || message.includes("database_id");
+}
+
 async function handleNotionStart(request, env) {
   const url = new URL(request.url);
   const userId = url.searchParams.get("userId");
@@ -415,13 +420,24 @@ async function handleNotionBackup(request, env) {
     return json({ error: "No backup records" }, { status: 400, headers: corsHeaders });
   }
 
-  const databaseId = await ensureArchiveDatabase(saved.accessToken, saved, env, userId);
+  let databaseId = await ensureArchiveDatabase(saved.accessToken, saved, env, userId);
   const created = [];
   const failed = [];
   for (const record of records) {
     try {
       created.push(await createDatabaseRecord(saved.accessToken, databaseId, record));
     } catch (error) {
+      if (isMissingDatabaseError(error)) {
+        saved.databaseId = "";
+        await env.DAILY_PLAN_USERS.put(`notion:${userId}`, JSON.stringify(saved));
+        databaseId = await ensureArchiveDatabase(saved.accessToken, saved, env, userId);
+        try {
+          created.push(await createDatabaseRecord(saved.accessToken, databaseId, record));
+          continue;
+        } catch (retryError) {
+          error = retryError;
+        }
+      }
       failed.push({
         section: record.section,
         itemNo: record.itemNo,
