@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-055
+  담당: 멀린
+  상태: Done
+  범위: Google Sheets 백업 누적 저장 및 에디터 줄바꿈 보존
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 기존 갱신/삭제 함수 참조 제거 확인
+  리스크/메모: 보스 확인 결과 기존 행 갱신 방식은 요구사항과 불일치하여 백업을 항상 append 누적 저장으로 변경. MEMO/THANKS/SUMMARY/Important는 에디터 HTML에서 줄바꿈을 보존하는 백업 전용 텍스트 변환을 사용하고, Sheets A:I 열에 wrapStrategy WRAP 서식을 적용하도록 변경. 기존 시트에 이미 덮어써진 과거 행은 앱 코드만으로 복구 불가.
+
 - ID: DP-054
   담당: 멀린
   상태: Done

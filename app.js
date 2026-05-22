@@ -782,6 +782,24 @@ function htmlToText(html) {
   return (el.textContent || "").replace(/\s+/g, " ").trim();
 }
 
+function htmlToBackupText(html) {
+  if (!html) return "";
+  const el = document.createElement("div");
+  el.innerHTML = html;
+  el.querySelectorAll("br").forEach((node) => {
+    node.replaceWith(document.createTextNode("\n"));
+  });
+  el.querySelectorAll("p, div, li").forEach((node) => {
+    node.appendChild(document.createTextNode("\n"));
+  });
+  return (el.textContent || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/[ \t]+\n/g, "\n")
+    .replace(/\n[ \t]+/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
 function makeArchiveSnippet(text, keyword) {
   const clean = (text || "").replace(/\s+/g, " ").trim();
   if (!clean) return "내용 없음";
@@ -1201,7 +1219,7 @@ async function backupCurrentPlanToSheets(options = {}) {
       return;
     }
 
-    await upsertArchiveRows(sheetId, rows);
+    await appendArchiveSheetRows(sheetId, rows);
     clearBackedUpCompletedItems();
     saveState();
     renderList("todos");
@@ -1212,7 +1230,7 @@ async function backupCurrentPlanToSheets(options = {}) {
     if (options.auto) {
       localStorage.setItem(AUTO_SHEETS_BACKUP_KEY, backupDate);
     }
-    updateBackupStatus(`Google Sheets 백업 완료: 오늘 기록 ${rows.length}행 저장/갱신`);
+    updateBackupStatus(`Google Sheets 백업 완료: 오늘 기록 ${rows.length}행 추가 저장`);
     if (!options.auto) showToast("Google Sheets 백업 완료", "success");
   } catch (e) {
     if (e && e.status === 401) handleAuthExpired();
@@ -1243,6 +1261,7 @@ async function ensureArchiveSheet() {
     cloudConfig.archiveSheetId = foundId;
     saveCloudConfig();
     await ensureArchiveHeader(foundId);
+    await ensureArchiveLayout(foundId);
     return foundId;
   }
 
@@ -1264,6 +1283,7 @@ async function ensureArchiveSheet() {
   cloudConfig.archiveSheetId = created.spreadsheetId;
   saveCloudConfig();
   await ensureArchiveHeader(cloudConfig.archiveSheetId);
+  await ensureArchiveLayout(cloudConfig.archiveSheetId);
   return cloudConfig.archiveSheetId;
 }
 
@@ -1295,91 +1315,54 @@ async function ensureArchiveHeader(sheetId) {
   if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 제목 행 저장에 실패했습니다.");
 }
 
-async function upsertArchiveRows(sheetId, rowsByDate) {
-  await ensureArchiveHeader(sheetId);
-  const dateIndex = await getArchiveSheetDateIndex(sheetId);
-  const rowsByBackupDate = new Map();
-
-  for (const row of rowsByDate) {
-    const backupDate = row[0];
-    if (!rowsByBackupDate.has(backupDate)) rowsByBackupDate.set(backupDate, []);
-    rowsByBackupDate.get(backupDate).push(row);
-  }
-
-  for (const [backupDate, rows] of rowsByBackupDate) {
-    const existingRows = dateIndex.get(backupDate) || [];
-    const rowsToAppend = [];
-
-    for (let i = 0; i < rows.length; i += 1) {
-      const targetRow = existingRows[i];
-      if (targetRow) await updateArchiveSheetRow(sheetId, targetRow, rows[i]);
-      else rowsToAppend.push(rows[i]);
-    }
-
-    if (existingRows.length > rows.length) {
-      await clearArchiveSheetRows(sheetId, existingRows.slice(rows.length));
-    }
-
-    if (rowsToAppend.length) await appendArchiveSheetRows(sheetId, rowsToAppend);
-  }
-}
-
-async function getArchiveSheetDateIndex(sheetId) {
-  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A:A`);
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}`, {
+async function getArchiveSheetTabId(sheetId) {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}?fields=sheets(properties(sheetId,title))`, {
     headers: { "Authorization": `Bearer ${googleAccessToken}` }
   });
   if (res.status === 401) throw { status: 401 };
-  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 날짜 목록 확인에 실패했습니다.");
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 탭 정보 확인에 실패했습니다.");
 
   const data = await res.json();
-  const index = new Map();
-  (data.values || []).forEach((row, i) => {
-    const date = row && row[0];
-    if (date && date !== "Backup Date") {
-      if (!index.has(date)) index.set(date, []);
-      index.get(date).push(i + 1);
-    }
-  });
-  return index;
+  const sheet = (data.sheets || []).find((item) => item.properties && item.properties.title === ARCHIVE_SHEET_TAB);
+  return sheet && sheet.properties ? sheet.properties.sheetId : null;
 }
 
-async function updateArchiveSheetRow(sheetId, rowNumber, row) {
-  const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:I${rowNumber}`);
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}?valueInputOption=RAW`, {
-    method: "PUT",
-    headers: {
-      "Authorization": `Bearer ${googleAccessToken}`,
-      "Content-Type": "application/json"
-    },
-    body: JSON.stringify({ values: [row] })
-  });
-  if (res.status === 401) throw { status: 401 };
-  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 행 업데이트에 실패했습니다.");
-}
+async function ensureArchiveLayout(sheetId) {
+  const tabId = await getArchiveSheetTabId(sheetId);
+  if (tabId === null) return;
 
-async function clearArchiveSheetRows(sheetId, rowNumbers) {
-  if (!rowNumbers.length) return;
-  const data = rowNumbers.map((rowNumber) => ({
-    range: `'${ARCHIVE_SHEET_TAB}'!A${rowNumber}:I${rowNumber}`,
-    values: [["", "", "", "", "", "", "", "", ""]]
-  }));
-  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values:batchUpdate`, {
+  const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}:batchUpdate`, {
     method: "POST",
     headers: {
       "Authorization": `Bearer ${googleAccessToken}`,
       "Content-Type": "application/json"
     },
     body: JSON.stringify({
-      valueInputOption: "RAW",
-      data
+      requests: [{
+        repeatCell: {
+          range: {
+            sheetId: tabId,
+            startColumnIndex: 0,
+            endColumnIndex: 9
+          },
+          cell: {
+            userEnteredFormat: {
+              wrapStrategy: "WRAP",
+              verticalAlignment: "MIDDLE"
+            }
+          },
+          fields: "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment"
+        }
+      }]
     })
   });
   if (res.status === 401) throw { status: 401 };
-  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 기존 행 정리에 실패했습니다.");
+  if (!res.ok) throw await buildGoogleApiError(res, "Google Sheets 줄바꿈 서식 적용에 실패했습니다.");
 }
 
 async function appendArchiveSheetRows(sheetId, rows) {
+  await ensureArchiveHeader(sheetId);
+  await ensureArchiveLayout(sheetId);
   const range = encodeURIComponent(`'${ARCHIVE_SHEET_TAB}'!A:I`);
   const res = await fetch(`https://sheets.googleapis.com/v4/spreadsheets/${sheetId}/values/${range}:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS`, {
     method: "POST",
@@ -1399,7 +1382,7 @@ function buildDailyArchiveRows(backupDate, planDate, plan) {
   const importantItems = [];
 
   ["important1", "important2", "important3"].forEach((key) => {
-    const text = htmlToText(editors[key]);
+    const text = htmlToBackupText(editors[key]);
     if (plan.importantDone && plan.importantDone[key] && text) {
       importantItems.push(text);
     }
@@ -1407,9 +1390,9 @@ function buildDailyArchiveRows(backupDate, planDate, plan) {
 
   const todoItems = buildTodoBackupCells(plan.todos || []);
   const timelineItems = buildTimelineBackupCells(plan.timeline || []);
-  const memoText = htmlToText(editors.memo);
-  const thanksText = htmlToText(editors.thanks);
-  const summaryText = htmlToText(editors.summary);
+  const memoText = htmlToBackupText(editors.memo);
+  const thanksText = htmlToBackupText(editors.thanks);
+  const summaryText = htmlToBackupText(editors.summary);
 
   const rowCount = Math.max(
     importantItems.length,
