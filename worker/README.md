@@ -39,6 +39,7 @@ https://daily-plan-backup-api.heat21c.workers.dev/auth/notion/callback
 
 첫 백업 시 `parentPageId` 페이지 아래에 `Daily Plan Archive DB` 데이터베이스를 생성하고, 이후에는 같은 데이터베이스에 계속 누적 저장합니다.
 재연결 후에도 같은 상위 페이지에 이미 `Daily Plan Archive DB`가 있으면 기존 데이터베이스를 찾아 재사용합니다.
+KV에 저장된 데이터베이스 ID가 삭제되었거나 integration에 공유되지 않아 조회되지 않으면, 저장된 ID를 버리고 기존 DB 검색 또는 신규 DB 생성으로 복구합니다.
 
 데이터베이스 속성:
 

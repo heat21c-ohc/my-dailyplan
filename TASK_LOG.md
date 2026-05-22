@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-061
+  담당: 멀린
+  상태: Done
+  범위: Notion KV에 저장된 무효 databaseId 복구 처리
+  변경 파일: `worker/notion-backup-worker.js`, `worker/README.md`, `TASK_LOG.md`
+  검증: `node --check worker/notion-backup-worker.js` 통과, `git diff --check` 통과
+  리스크/메모: Notion API 404 `Could not find database with ID` 에러 대응. 저장된 databaseId가 삭제되었거나 integration에 공유되지 않은 경우 저장된 ID를 비우고 기존 DB 검색 또는 신규 DB 생성으로 복구하도록 수정. 실제 반영은 Cloudflare Worker 재배포 필요.
+
 - ID: DP-060
   담당: 멀린
   상태: Done

@@ -98,6 +98,24 @@ async function callNotion(token, path, init = {}) {
   return res.json();
 }
 
+async function tryCallNotion(token, path, init = {}) {
+  const res = await fetch(`https://api.notion.com/v1${path}`, {
+    ...init,
+    headers: {
+      "authorization": `Bearer ${token}`,
+      "notion-version": NOTION_VERSION,
+      "content-type": "application/json",
+      ...(init.headers || {})
+    }
+  });
+
+  if (!res.ok) {
+    return { ok: false, status: res.status, detail: await res.text() };
+  }
+
+  return { ok: true, data: await res.json() };
+}
+
 function normalizeText(value) {
   return value && String(value).trim() ? String(value).trim() : "";
 }
@@ -232,7 +250,12 @@ function buildDatabaseSchema(parentPageId) {
 }
 
 async function ensureArchiveDatabase(token, saved, env, userId) {
-  if (saved.databaseId) return saved.databaseId;
+  if (saved.databaseId) {
+    const existing = await tryCallNotion(token, `/databases/${saved.databaseId}`);
+    if (existing.ok) return saved.databaseId;
+    saved.databaseId = "";
+    await env.DAILY_PLAN_USERS.put(`notion:${userId}`, JSON.stringify(saved));
+  }
 
   const existingDatabaseId = await findArchiveDatabase(token, saved.parentPageId);
   if (existingDatabaseId) {
