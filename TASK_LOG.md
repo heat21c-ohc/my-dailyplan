@@ -49,6 +49,46 @@
 
 ## Done
 
+- ID: DP-067
+  담당: 멀린
+  상태: Done
+  범위: 로그인 상태 Important 안내문구 미표시 원인 재분석 및 캐시/DOM 변화 대응 보강
+  변경 파일: `index.html`, `app.js`, `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 로컬 서버(`http://127.0.0.1:8765/index.html`) 응답에서 `styles.css?v=20260523-dp067`, `app.js?v=20260523-dp067`, `MutationObserver`, `is-editor-empty::before` 반영 확인
+  리스크/메모: 권한 문제가 아니라 실제 로그인 세션/Drive 원격 데이터와 브라우저 캐시가 결합된 재현 환경 차이. contenteditable 내부 DOM 변화가 input 이벤트 없이 발생해 placeholder 클래스가 누락될 수 있어 MutationObserver로 에디터 내부 변화를 감시하도록 보강. 배포 페이지에서 계속 보이지 않으면 최신 `index.html/app.js/styles.css`가 배포되지 않았거나 브라우저 캐시가 이전 파일을 사용 중일 가능성이 높음.
+
+- ID: DP-066
+  담당: 멀린
+  상태: Done
+  범위: 로그인 상태 Important 안내문구 미표시 재수정
+  변경 파일: `app.js`, `styles.css`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 로컬 서버(`http://127.0.0.1:8765/index.html`) 브라우저 검증에서 Important 1/2/3 에디터에 `is-editor-empty` 클래스와 `::before` 안내문구가 적용됨을 확인
+  리스크/메모: contenteditable 빈 칸은 로그인 후 원격 데이터 반영/포커스 과정에서 브라우저가 내부 `<br>`을 삽입하면 CSS `:empty`가 깨질 수 있음. JS가 텍스트 공백 여부를 직접 판별해 `is-editor-empty` 클래스를 붙이고 CSS가 해당 클래스 기준으로 안내문구를 표시하도록 변경.
+
+- ID: DP-065
+  담당: 멀린
+  상태: Done
+  범위: 로그인 후 Important 안내문구 미표시 재발 방지 및 Archive 검색 범위 명시
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 로컬 서버(`http://127.0.0.1:8765/index.html`) 브라우저 검증에서 Important 1/2/3 `::before` 안내문구 표시 확인 및 Archive 결과 문구가 `현재 저장된 계획 검색 결과 0건 · Sheets/Notion 백업 제외`로 표시됨 확인
+  리스크/메모: Archive 검색은 현재 로컬/Google Drive 동기화 JSON에 남아 있는 날짜별 계획만 대상으로 하며 Google Sheets/Notion 백업 저장소는 직접 검색하지 않음. 로그인 후 Drive에서 받아온 원격 계획에도 빈 HTML/제로폭 문자/공백만 있는 에디터 값이 있을 수 있어 로드, 수집, 원격 반영 단계에서 정규화하도록 보강.
+
+- ID: DP-064
+  담당: 멀린
+  상태: Done
+  범위: Important 첫 번째 입력칸 안내문구 미표시 수정
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 로컬 서버(`http://127.0.0.1:8765/index.html`) 브라우저 검증에서 Important 1/2/3 입력칸의 `::before` 안내문구가 각각 `"중요한 일 1"`, `"중요한 일 2"`, `"중요한 일 3"`으로 표시됨을 확인
+  리스크/메모: contenteditable이 빈 값처럼 보여도 `<br>` 등 빈 HTML이 남으면 CSS `:empty` 안내문구가 사라지는 문제를 방지하기 위해 에디터 입력/복원 시 텍스트가 없는 HTML은 빈 문자열로 정규화.
+
+- ID: DP-063
+  담당: 멀린
+  상태: Done
+  범위: 로그아웃 상태 로컬 데이터 잔존 방지 및 모바일/다른 기기 자동 동기화 pull 보강
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, 로컬 서버(`http://127.0.0.1:8765/index.html`) 브라우저 검증에서 로그아웃 상태 입력값이 새로고침 후 저장되지 않음을 확인
+  리스크/메모: 로그아웃 상태에서는 계획 데이터를 로컬 저장소에 보존하지 않도록 변경. 로그인 후에는 30초 주기, 브라우저 포커스 복귀, 탭 재활성화 시 Drive pull을 수행해 모바일/PC 간 변경 반영 지연을 줄임. 실제 Google OAuth/Drive 교차 기기 검증은 보스 계정 로그인 환경에서 확인 필요.
+
 - ID: DP-062
   담당: 멀린
   상태: Done

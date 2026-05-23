@@ -15,6 +15,7 @@ const NOTION_PARENT_PAGE_ID_KEY = "daily-plan-notion-parent-page-id";
 const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets"; /* Drive sync + Sheets archive */
 const DEFAULT_TODO_ROWS = 6;
 const DEFAULT_TIMELINE_ROWS = 6;
+const CLOUD_PULL_INTERVAL_MS = 30000;
 const ARCHIVE_SECTION_LABELS = {
   important: "Important",
   todos: "TO DO LIST",
@@ -29,6 +30,7 @@ let googleAccessToken = sessionStorage.getItem("google_access_token") || null;
 let tokenClient = null;
 let userEmail = null; /* 로그인 사용자 이메일 (캘린더 임베드 src용) */
 let cloudSyncTimer = 0; /* 드라이브 자동 동기화 디바운스 타이머 */
+let cloudPullTimer = 0; /* 로그인 상태에서 다른 기기 변경사항을 주기적으로 가져오는 타이머 */
 let autoSheetsBackupTimer = 0;
 
 // 드라이브 동기화 설정 (앱이 생성한 동기화 파일 ID 캐싱)
@@ -89,7 +91,12 @@ function init() {
   initTheme();
   initCloudConfig();
   migrateLegacyData();
-  loadState();
+  if (googleAccessToken) {
+    loadState();
+  } else {
+    clearLocalPlanStorage();
+    resetStateForCurrentDate();
+  }
   ensureRows("todos", DEFAULT_TODO_ROWS);
   ensureRows("timeline", DEFAULT_TIMELINE_ROWS);
   document.querySelector("#planDate").value = state.planDate || today();
@@ -178,11 +185,20 @@ function bindPageEvents() {
   document.querySelectorAll("[data-editor]").forEach((editor) => {
     editor.addEventListener("focus", () => {
       activeEditor = editor;
+      updateEditorEmptyState(editor);
     });
     editor.addEventListener("input", () => {
-      state.editors[editor.dataset.editor] = editor.innerHTML;
+      state.editors[editor.dataset.editor] = normalizeEditorHtml(editor.innerHTML);
+      updateEditorEmptyState(editor);
       scheduleSave();
     });
+
+    if (window.MutationObserver) {
+      const observer = new MutationObserver(() => {
+        updateEditorEmptyState(editor);
+      });
+      observer.observe(editor, { childList: true, subtree: true, characterData: true });
+    }
   });
 
   /* 중요 업무 체크박스 클릭 시 완료 여부 상태 기록 및 취소선 클래스 토글 */
@@ -216,6 +232,11 @@ function bindPageEvents() {
     syncBtn.addEventListener("click", manualSync);
   }
 
+  window.addEventListener("focus", syncFromCloudIfLinked);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) syncFromCloudIfLinked();
+  });
+
   bindBackupEvents();
   bindArchiveEvents();
 }
@@ -233,11 +254,12 @@ function loadState() {
 
   try {
     const parsed = JSON.parse(saved);
-    state.todos = Array.isArray(parsed.todos) ? parsed.todos : [];
-    state.timeline = Array.isArray(parsed.timeline) ? parsed.timeline : [];
-    state.editors = parsed.editors && typeof parsed.editors === "object" ? parsed.editors : {};
-    state.importantDone = parsed.importantDone && typeof parsed.importantDone === "object"
-      ? parsed.importantDone
+    const normalized = normalizePlanData(parsed);
+    state.todos = Array.isArray(normalized.todos) ? normalized.todos : [];
+    state.timeline = Array.isArray(normalized.timeline) ? normalized.timeline : [];
+    state.editors = normalized.editors && typeof normalized.editors === "object" ? normalized.editors : {};
+    state.importantDone = normalized.importantDone && typeof normalized.importantDone === "object"
+      ? normalized.importantDone
       : { important1: false, important2: false, important3: false };
   } catch {
     localStorage.removeItem(key);
@@ -249,6 +271,7 @@ function loadState() {
 }
 
 function saveState() {
+  if (!googleAccessToken) return;
   const key = getStorageKeyForDate(state.planDate);
   localStorage.setItem(key, JSON.stringify(state));
   localStorage.setItem(LOCAL_MODIFIED_KEY, String(Date.now())); /* 수정 시각 갱신 (충돌 판별용) */
@@ -265,6 +288,17 @@ function resetStateForCurrentDate() {
 }
 
 function clearLocalPlanData() {
+  clearLocalPlanStorage();
+  window.clearTimeout(cloudSyncTimer);
+  window.clearTimeout(saveTimer);
+  resetStateForCurrentDate();
+  renderList("todos");
+  renderList("timeline");
+  hydrateEditors();
+  hydrateImportantCheckboxes();
+}
+
+function clearLocalPlanStorage() {
   const keysToRemove = [];
   for (let i = 0; i < localStorage.length; i += 1) {
     const key = localStorage.key(i);
@@ -275,13 +309,6 @@ function clearLocalPlanData() {
   localStorage.removeItem(LEGACY_STORAGE_KEY);
   localStorage.removeItem(LOCAL_MODIFIED_KEY);
   localStorage.removeItem(AUTO_SHEETS_BACKUP_KEY);
-  window.clearTimeout(cloudSyncTimer);
-  window.clearTimeout(saveTimer);
-  resetStateForCurrentDate();
-  renderList("todos");
-  renderList("timeline");
-  hydrateEditors();
-  hydrateImportantCheckboxes();
 }
 
 function scheduleSave() {
@@ -434,8 +461,16 @@ function syncOrderFromDom(listName) {
 
 function hydrateEditors() {
   document.querySelectorAll("[data-editor]").forEach((editor) => {
-    editor.innerHTML = state.editors[editor.dataset.editor] || "";
+    const html = normalizeEditorHtml(state.editors[editor.dataset.editor]);
+    state.editors[editor.dataset.editor] = html;
+    editor.innerHTML = html;
+    updateEditorEmptyState(editor);
   });
+}
+
+function updateEditorEmptyState(editor) {
+  if (!editor) return;
+  editor.classList.toggle("is-editor-empty", !htmlToText(editor.innerHTML));
 }
 
 function autoResizeTitleInput(input) {
@@ -649,7 +684,7 @@ function scheduleArchiveSearch() {
 function renderArchiveLoading() {
   const meta = document.querySelector("#archiveResultMeta");
   const results = document.querySelector("#archiveResults");
-  if (meta) meta.textContent = "저장된 기록을 불러오는 중입니다.";
+  if (meta) meta.textContent = "현재 저장된 계획을 불러오는 중입니다. Sheets/Notion 백업 기록은 포함하지 않습니다.";
   if (results) results.replaceChildren();
 }
 
@@ -662,7 +697,7 @@ function renderArchiveResults() {
   results.replaceChildren();
 
   if (!matches.length) {
-    meta.textContent = "검색 결과 0건";
+    meta.textContent = "현재 저장된 계획 검색 결과 0건 · Sheets/Notion 백업 제외";
     const empty = document.createElement("div");
     empty.className = "archive-empty";
     empty.textContent = "조건에 맞는 저장 기록이 없습니다.";
@@ -670,7 +705,7 @@ function renderArchiveResults() {
     return;
   }
 
-  meta.textContent = `검색 결과 ${matches.length}건`;
+  meta.textContent = `현재 저장된 계획 검색 결과 ${matches.length}건 · Sheets/Notion 백업 제외`;
   matches.forEach((match) => {
     const card = document.createElement("button");
     card.className = "archive-result-card";
@@ -779,7 +814,25 @@ function htmlToText(html) {
   if (!html) return "";
   const el = document.createElement("div");
   el.innerHTML = html;
-  return (el.textContent || "").replace(/\s+/g, " ").trim();
+  return (el.textContent || "")
+    .replace(/[\u200B-\u200D\uFEFF]/g, "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function normalizeEditorHtml(html) {
+  return htmlToText(html) ? html : "";
+}
+
+function normalizePlanData(plan) {
+  if (!plan || typeof plan !== "object") return plan;
+  const editors = plan.editors && typeof plan.editors === "object" ? plan.editors : {};
+  const normalizedEditors = {};
+  Object.keys(editors).forEach((key) => {
+    normalizedEditors[key] = normalizeEditorHtml(editors[key]);
+  });
+  return { ...plan, editors: normalizedEditors };
 }
 
 function htmlToBackupText(html) {
@@ -893,6 +946,7 @@ async function onGoogleLinked() {
     embedCalendar();
     showToast("Google Drive에서 데이터를 불러오는 중입니다.", "info");
     await pullFromDrive({ preferRemote: true });
+    startCloudPullLoop();
   } catch (e) {
     if (e && e.status === 401) {
       handleAuthExpired();
@@ -937,6 +991,7 @@ function disconnectGoogle() {
   googleAccessToken = null;
   userEmail = null;
   sessionStorage.removeItem("google_access_token");
+  stopCloudPullLoop();
   clearLocalPlanData();
   updateGoogleUI(false);
   const frame = document.querySelector("#calendarFrame");
@@ -957,7 +1012,10 @@ function disconnectGoogle() {
 /* 토큰 만료 처리 */
 function handleAuthExpired() {
   googleAccessToken = null;
+  userEmail = null;
   sessionStorage.removeItem("google_access_token");
+  stopCloudPullLoop();
+  clearLocalPlanData();
   updateGoogleUI(false);
   showToast("로그인이 만료되었습니다. 다시 로그인해 주세요.", "warning");
 }
@@ -985,6 +1043,29 @@ function updateGoogleUI(isLinked) {
   }
 }
 
+function startCloudPullLoop() {
+  stopCloudPullLoop();
+  if (!googleAccessToken) return;
+  cloudPullTimer = window.setInterval(syncFromCloudIfLinked, CLOUD_PULL_INTERVAL_MS);
+}
+
+function stopCloudPullLoop() {
+  if (cloudPullTimer) {
+    window.clearInterval(cloudPullTimer);
+    cloudPullTimer = 0;
+  }
+}
+
+async function syncFromCloudIfLinked() {
+  if (!googleAccessToken) return;
+  try {
+    await pullFromDrive({ silent: true });
+  } catch (e) {
+    if (e && e.status === 401) handleAuthExpired();
+    else console.error("cloud pull error:", e);
+  }
+}
+
 /* ---- 드라이브 동기화 핵심 로직 ---- */
 
 /* 로컬의 모든 날짜 데이터를 하나의 페이로드로 수집 */
@@ -995,7 +1076,7 @@ function gatherAllLocalData() {
     if (k && k.startsWith(STORAGE_KEY_PREFIX)) {
       const date = k.slice(STORAGE_KEY_PREFIX.length);
       try {
-        plans[date] = JSON.parse(localStorage.getItem(k));
+        plans[date] = normalizePlanData(JSON.parse(localStorage.getItem(k)));
       } catch {
         /* 손상된 항목은 건너뜀 */
       }
@@ -1009,7 +1090,7 @@ function gatherAllLocalData() {
 function applyRemoteData(remote) {
   if (!remote || !remote.plans) return;
   Object.keys(remote.plans).forEach((date) => {
-    localStorage.setItem(getStorageKeyForDate(date), JSON.stringify(remote.plans[date]));
+    localStorage.setItem(getStorageKeyForDate(date), JSON.stringify(normalizePlanData(remote.plans[date])));
   });
 }
 
@@ -1138,7 +1219,7 @@ async function pullFromDrive(options = {}) {
     applyRemoteData(remote);
     localStorage.setItem(LOCAL_MODIFIED_KEY, String(remoteMod || Date.now()));
     reloadCurrentView();
-    showToast("최신 데이터를 불러왔습니다.", "success");
+    if (!options.silent) showToast("최신 데이터를 불러왔습니다.", "success");
   } else {
     await pushToDrive();
   }
