@@ -49,6 +49,14 @@
 
 ## Done
 
+- ID: DP-068
+  담당: 멀린
+  상태: Done
+  범위: Archive 로컬 검색 기능 제거
+  변경 파일: `index.html`, `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, `git diff --check` 통과, `rg`로 `app.js`/`index.html` 내 Archive 검색 버튼·모달·검색 함수 참조 제거 확인
+  리스크/메모: Google Sheets/Notion 백업 기능과 백업 설정 모달은 유지. 로컬/Drive 동기화 저장소를 다시 검색해 과거 계획을 불러오는 Archive UI와 JS만 제거해 계정 전환 시 저장 데이터 노출 및 과거 자료 재적용 리스크를 줄임.
+
 - ID: DP-067
   담당: 멀린
   상태: Done

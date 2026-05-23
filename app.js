@@ -16,14 +16,6 @@ const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://ww
 const DEFAULT_TODO_ROWS = 6;
 const DEFAULT_TIMELINE_ROWS = 6;
 const CLOUD_PULL_INTERVAL_MS = 30000;
-const ARCHIVE_SECTION_LABELS = {
-  important: "Important",
-  todos: "TO DO LIST",
-  timeline: "TIME LINE",
-  memo: "MEMO",
-  thanks: "THANKS GOD",
-  summary: "SUMMARY"
-};
 
 // 구글 API 연동 런타임 변수
 let googleAccessToken = sessionStorage.getItem("google_access_token") || null;
@@ -83,7 +75,6 @@ const lists = {
 
 let activeEditor = null;
 let saveTimer = 0;
-let archiveSearchTimer = 0;
 
 init();
 
@@ -238,7 +229,6 @@ function bindPageEvents() {
   });
 
   bindBackupEvents();
-  bindArchiveEvents();
 }
 
 function loadState() {
@@ -607,209 +597,6 @@ function updateNotionBackupStatus(message) {
   if (backupBtn) backupBtn.disabled = !connected || !pageId;
 }
 
-function bindArchiveEvents() {
-  const openBtn = document.querySelector("#openArchiveSearch");
-  const closeBtn = document.querySelector("#closeArchiveSearch");
-  const modal = document.querySelector("#archiveModal");
-  const dateInput = document.querySelector("#archiveDateFilter");
-  const sectionSelect = document.querySelector("#archiveSectionFilter");
-  const keywordInput = document.querySelector("#archiveKeyword");
-  const clearBtn = document.querySelector("#clearArchiveSearch");
-
-  if (!openBtn || !modal) return;
-
-  openBtn.addEventListener("click", openArchiveSearch);
-  if (closeBtn) closeBtn.addEventListener("click", closeArchiveSearch);
-
-  modal.querySelectorAll("[data-archive-close]").forEach((el) => {
-    el.addEventListener("click", closeArchiveSearch);
-  });
-
-  [dateInput, sectionSelect, keywordInput].forEach((input) => {
-    if (!input) return;
-    input.addEventListener("input", scheduleArchiveSearch);
-    input.addEventListener("change", scheduleArchiveSearch);
-  });
-
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      if (dateInput) dateInput.value = "";
-      if (sectionSelect) sectionSelect.value = "all";
-      if (keywordInput) keywordInput.value = "";
-      renderArchiveResults();
-      if (keywordInput) keywordInput.focus();
-    });
-  }
-
-  document.addEventListener("keydown", (event) => {
-    if (event.key === "Escape" && !modal.hidden) closeArchiveSearch();
-  });
-}
-
-async function openArchiveSearch() {
-  const modal = document.querySelector("#archiveModal");
-  const keywordInput = document.querySelector("#archiveKeyword");
-  if (!modal) return;
-
-  saveState();
-  modal.hidden = false;
-  document.body.classList.add("archive-open");
-  renderArchiveLoading();
-
-  if (googleAccessToken) {
-    try {
-      await pullFromDrive();
-    } catch (e) {
-      if (e && e.status === 401) handleAuthExpired();
-      else showToast(`Archive 최신 동기화 실패: ${e.message || "오류"}`, "warning");
-    }
-  }
-
-  renderArchiveResults();
-  if (keywordInput) keywordInput.focus();
-}
-
-function closeArchiveSearch() {
-  const modal = document.querySelector("#archiveModal");
-  if (!modal) return;
-  modal.hidden = true;
-  document.body.classList.remove("archive-open");
-}
-
-function scheduleArchiveSearch() {
-  window.clearTimeout(archiveSearchTimer);
-  archiveSearchTimer = window.setTimeout(renderArchiveResults, 120);
-}
-
-function renderArchiveLoading() {
-  const meta = document.querySelector("#archiveResultMeta");
-  const results = document.querySelector("#archiveResults");
-  if (meta) meta.textContent = "현재 저장된 계획을 불러오는 중입니다. Sheets/Notion 백업 기록은 포함하지 않습니다.";
-  if (results) results.replaceChildren();
-}
-
-function renderArchiveResults() {
-  const meta = document.querySelector("#archiveResultMeta");
-  const results = document.querySelector("#archiveResults");
-  if (!meta || !results) return;
-
-  const matches = searchArchivePlans();
-  results.replaceChildren();
-
-  if (!matches.length) {
-    meta.textContent = "현재 저장된 계획 검색 결과 0건 · Sheets/Notion 백업 제외";
-    const empty = document.createElement("div");
-    empty.className = "archive-empty";
-    empty.textContent = "조건에 맞는 저장 기록이 없습니다.";
-    results.appendChild(empty);
-    return;
-  }
-
-  meta.textContent = `현재 저장된 계획 검색 결과 ${matches.length}건 · Sheets/Notion 백업 제외`;
-  matches.forEach((match) => {
-    const card = document.createElement("button");
-    card.className = "archive-result-card";
-    card.type = "button";
-    card.dataset.date = match.date;
-
-    const topline = document.createElement("div");
-    topline.className = "archive-result-topline";
-
-    const date = document.createElement("span");
-    date.className = "archive-result-date";
-    date.textContent = match.date;
-
-    const section = document.createElement("span");
-    section.className = "archive-result-section";
-    section.textContent = match.sectionLabel;
-
-    const snippet = document.createElement("div");
-    snippet.className = "archive-result-snippet";
-    snippet.textContent = match.snippet;
-
-    topline.append(date, section);
-    card.append(topline, snippet);
-    card.addEventListener("click", () => goToArchiveDate(match.date));
-    results.appendChild(card);
-  });
-}
-
-function searchArchivePlans() {
-  const dateFilter = document.querySelector("#archiveDateFilter")?.value || "";
-  const sectionFilter = document.querySelector("#archiveSectionFilter")?.value || "all";
-  const keyword = (document.querySelector("#archiveKeyword")?.value || "").trim().toLowerCase();
-  const localData = gatherAllLocalData();
-  const plans = localData.plans || {};
-
-  return Object.keys(plans)
-    .filter((date) => !dateFilter || date === dateFilter)
-    .sort((a, b) => b.localeCompare(a))
-    .flatMap((date) => {
-      const plan = plans[date];
-      return getArchiveSections(plan)
-        .filter((section) => sectionFilter === "all" || section.id === sectionFilter)
-        .filter((section) => !keyword || section.text.toLowerCase().includes(keyword))
-        .map((section) => ({
-          date,
-          sectionLabel: section.label,
-          snippet: makeArchiveSnippet(section.text, keyword)
-        }));
-    });
-}
-
-function getArchiveSections(plan) {
-  if (!plan || typeof plan !== "object") return [];
-
-  const editors = plan.editors && typeof plan.editors === "object" ? plan.editors : {};
-  const importantText = ["important1", "important2", "important3"]
-    .map((key) => htmlToText(editors[key]))
-    .filter(Boolean)
-    .join(" / ");
-
-  const sections = [
-    {
-      id: "important",
-      label: ARCHIVE_SECTION_LABELS.important,
-      text: importantText
-    },
-    {
-      id: "todos",
-      label: ARCHIVE_SECTION_LABELS.todos,
-      text: rowsToArchiveText(plan.todos)
-    },
-    {
-      id: "timeline",
-      label: ARCHIVE_SECTION_LABELS.timeline,
-      text: rowsToArchiveText(plan.timeline)
-    },
-    {
-      id: "memo",
-      label: ARCHIVE_SECTION_LABELS.memo,
-      text: htmlToText(editors.memo)
-    },
-    {
-      id: "thanks",
-      label: ARCHIVE_SECTION_LABELS.thanks,
-      text: htmlToText(editors.thanks)
-    },
-    {
-      id: "summary",
-      label: ARCHIVE_SECTION_LABELS.summary,
-      text: htmlToText(editors.summary)
-    }
-  ];
-
-  return sections.filter((section) => section.text);
-}
-
-function rowsToArchiveText(rows) {
-  if (!Array.isArray(rows)) return "";
-  return rows
-    .map((row) => [row.task, row.start, row.end].filter(Boolean).join(" "))
-    .filter(Boolean)
-    .join(" / ");
-}
-
 function htmlToText(html) {
   if (!html) return "";
   const el = document.createElement("div");
@@ -851,32 +638,6 @@ function htmlToBackupText(html) {
     .replace(/\n[ \t]+/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
-}
-
-function makeArchiveSnippet(text, keyword) {
-  const clean = (text || "").replace(/\s+/g, " ").trim();
-  if (!clean) return "내용 없음";
-  if (!keyword) return clean.length > 150 ? `${clean.slice(0, 150)}...` : clean;
-
-  const lower = clean.toLowerCase();
-  const index = lower.indexOf(keyword);
-  if (index < 0) return clean.length > 150 ? `${clean.slice(0, 150)}...` : clean;
-
-  const start = Math.max(0, index - 45);
-  const end = Math.min(clean.length, index + keyword.length + 90);
-  const prefix = start > 0 ? "..." : "";
-  const suffix = end < clean.length ? "..." : "";
-  return `${prefix}${clean.slice(start, end)}${suffix}`;
-}
-
-function goToArchiveDate(date) {
-  saveState();
-  state.planDate = date;
-  const planDateInput = document.querySelector("#planDate");
-  if (planDateInput) planDateInput.value = date;
-  reloadCurrentView();
-  closeArchiveSearch();
-  showToast(`${date} 기록으로 이동했습니다.`, "success");
 }
 
 /* ==========================================================================

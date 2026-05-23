@@ -7,7 +7,7 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;500;600;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=20260523-dp067" />
+    <link rel="stylesheet" href="styles.css?v=20260523-dp068" />
     <script src="https://accounts.google.com/gsi/client" async defer></script>
   </head>
   <body>
@@ -39,10 +39,6 @@
           <button id="openBackupPanel" class="backup-settings-btn" type="button" title="기록 백업 위치 선택">
             <span class="btn-icon">↥</span>
             <span class="btn-label">Backup</span>
-          </button>
-          <button id="openArchiveSearch" class="archive-trigger-btn" type="button" title="저장된 Daily Plan 검색">
-            <span class="btn-icon">⌕</span>
-            <span class="btn-label">Archive</span>
           </button>
           <button id="themeToggle" class="theme-toggle-btn" type="button" aria-label="테마 전환" title="화면 테마 전환">🌙</button>
           <label class="date-field">
@@ -293,46 +289,6 @@
       </div>
     </section>
 
-    <section id="archiveModal" class="archive-modal" aria-labelledby="archiveTitle" aria-modal="true" role="dialog" hidden>
-      <div class="archive-backdrop" data-archive-close></div>
-      <div class="archive-dialog">
-        <div class="archive-header">
-          <div>
-            <p class="archive-eyebrow">Saved plans</p>
-            <h2 id="archiveTitle">Archive 검색</h2>
-          </div>
-          <button id="closeArchiveSearch" class="archive-close-btn" type="button" aria-label="Archive 검색 닫기">×</button>
-        </div>
-
-        <div class="archive-controls">
-          <label class="archive-field">
-            <span>DATE</span>
-            <input id="archiveDateFilter" type="date" />
-          </label>
-          <label class="archive-field">
-            <span>SECTION</span>
-            <select id="archiveSectionFilter">
-              <option value="all">전체 섹션</option>
-              <option value="important">Important</option>
-              <option value="todos">TO DO LIST</option>
-              <option value="timeline">TIME LINE</option>
-              <option value="memo">MEMO</option>
-              <option value="thanks">THANKS GOD</option>
-              <option value="summary">SUMMARY</option>
-            </select>
-          </label>
-          <label class="archive-field archive-keyword-field">
-            <span>KEYWORD</span>
-            <input id="archiveKeyword" type="search" placeholder="검색어 입력" autocomplete="off" />
-          </label>
-          <button id="clearArchiveSearch" class="archive-clear-btn" type="button">초기화</button>
-        </div>
-
-        <div id="archiveResultMeta" class="archive-result-meta">저장된 기록을 불러오는 중입니다.</div>
-        <div id="archiveResults" class="archive-results" aria-live="polite"></div>
-      </div>
-    </section>
-
     <template id="todoTemplate">
       <article class="plan-row" data-row>
         <button class="drag-handle" type="button" title="순서 이동" aria-label="순서 이동">≡</button>
@@ -369,6 +325,6 @@
       </article>
     </template>
 
-    <script src="app.js?v=20260523-dp067"></script>
+    <script src="app.js?v=20260523-dp068"></script>
   </body>
 </html>
