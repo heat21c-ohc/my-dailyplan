@@ -39,15 +39,38 @@
 
 ## In Progress
 
-- ID: DP-043
-  담당: 멀린
-  상태: In Progress
-  범위: TEAM_HANDOFF_GUIDE.md 확인 및 다음 작업 시작 준비
-  변경 파일: `TASK_LOG.md`
-  검증 예정: 실제 작업 완료 후 변경 파일과 검증 결과를 `TASK_LOG.md`에 기록
-  리스크/메모: 아직 보스가 구체적인 구현 작업을 지시하지 않아 시작 기록만 남김.
+
 
 ## Done
+
+- ID: DP-070
+  담당: 제미니
+  상태: Done
+  범위: 구글 캘린더 임베드 날짜 오류 수정 및 월간 뷰 변경
+  변경 파일: `app.js`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과. embedCalendar 함수 내 dates 파라미터가 오늘~내일로 기간을 형성하여 오류 없이 구글 캘린더가 최신 월간 뷰를 렌더링하도록 수정됨. mode=MONTH 반영 확인.
+  리스크/메모: 구글 캘린더 임베드 URL에서 dates 파라미터의 기간이 0일(시작일=종료일)일 때 발생하는 파싱 버그를 우회하기 위해 종료일을 시작일+1로 설정. 기본 뷰를 주간에서 월간(MONTH)으로 변경 완료.
+
+- ID: DP-069
+  담당: 윙맨
+  상태: Done
+  범위: 기기 간 동기화 불가 및 구글 캘린더 임베드 날짜 오류 수정
+  변경 파일: `app.js`, `index.html`, `TASK_LOG.md`
+  검증: `node --check app.js` 통과, 변경 코드 위치 확인 (GOOGLE_SCOPES 15행, embedCalendar 737~740행, ensureSyncFile 889~960행)
+  리스크/메모:
+    - [동기화 근본 원인] drive.file 스코프는 동일 OAuth 세션이 생성한 파일만 Drive 검색에서 반환. 모바일 새 세션에서 PC가 만든 sync 파일을 검색하면 결과가 없어 빈 파일을 새로 생성하므로 기기 간 공유가 되지 않았음.
+    - [Fix] GOOGLE_SCOPES에 drive.appdata 추가. ensureSyncFile을 ①캐시 fileId →  ②appDataFolder 검색(기기 무관 접근) → ③drive 검색(기존 파일 마이그레이션) → ④appDataFolder 신규 생성 순으로 재설계. createAppDataSyncFile 헬퍼 추가.
+    - [캘린더] embedCalendar에 &dates=YYYYMMDD%2FYYYYMMDD 추가 → 로그인 시 항상 오늘 날짜 포함 주(週) 로드.
+    - [주의] 기존 사용자 마이그레이션: PC에서 먼저 로그인 시 기존 drive 파일을 appDataFolder로 자동 이전. 새 기기에서 첫 로그인 시 appDataFolder 파일이 없으면 현재 로컬 데이터로 신규 생성. 재로그인 동의화면이 한 번 더 표시됨(스코프 변경으로 인해).
+    - [미검증] 실제 기기 간 동기화는 보스 계정 로그인 환경에서 최종 확인 필요.
+
+- ID: DP-043
+  담당: 멀린
+  상태: Done
+  범위: TEAM_HANDOFF_GUIDE.md 확인 및 다음 작업 시작 준비
+  변경 파일: `TASK_LOG.md`
+  검증: 문서 확인 완료
+  리스크/메모: DP-069로 이어서 수행.
 
 - ID: DP-068
   담당: 멀린

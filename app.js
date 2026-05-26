@@ -12,7 +12,7 @@ const BACKUP_WORKER_BASE_URL = "https://daily-plan-backup-api.heat21c.workers.de
 const NOTION_USER_ID_KEY = "daily-plan-notion-user-id";
 const NOTION_USER_SECRET_KEY = "daily-plan-notion-user-secret";
 const NOTION_PARENT_PAGE_ID_KEY = "daily-plan-notion-parent-page-id";
-const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets"; /* Drive sync + Sheets archive */
+const GOOGLE_SCOPES = "https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/drive.appdata https://www.googleapis.com/auth/drive.file https://www.googleapis.com/auth/spreadsheets"; /* Drive sync + Sheets archive */
 const DEFAULT_TODO_ROWS = 6;
 const DEFAULT_TIMELINE_ROWS = 6;
 const CLOUD_PULL_INTERVAL_MS = 30000;
@@ -733,8 +733,9 @@ function embedCalendar() {
   const frame = document.querySelector("#calendarFrame");
   if (!frame || !userEmail) return;
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul";
+  /* dates 파라미터를 생략하여 구글 캘린더가 자동으로 현재 실제 날짜가 속한 월을 표시하게 함 */
   frame.src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(userEmail)}`
-    + `&ctz=${encodeURIComponent(tz)}&mode=WEEK&showTitle=0&showPrint=0&showCalendars=0&showTz=0`;
+    + `&ctz=${encodeURIComponent(tz)}&mode=MONTH&showTitle=0&showPrint=0&showCalendars=0&showTz=0`;
 }
 
 /* 로그인 창 호출 */
@@ -882,8 +883,11 @@ async function buildGoogleApiError(response, fallbackMessage) {
   return new Error(`${hint}${suffix}`);
 }
 
-/* 동기화 파일 ID 확보 (캐시 검증, 검색, 없으면 생성) */
+/* 동기화 파일 ID 확보
+ * 순서: ①캐시 fileId 검증 → ②appDataFolder 검색(기기 간 공유) → ③drive 검색(기존 파일 마이그레이션) → ④신규 생성(appDataFolder)
+ * drive.file 스코프는 생성 세션이 다르면 검색이 불가해 기기 간 동기화 불가 → drive.appdata 사용 */
 async function ensureSyncFile() {
+  /* ① 캐시된 fileId 검증 */
   if (cloudConfig.syncFileId) {
     const check = await fetch(`https://www.googleapis.com/drive/v3/files/${cloudConfig.syncFileId}?fields=id,trashed`, {
       headers: { "Authorization": `Bearer ${googleAccessToken}` }
@@ -899,29 +903,51 @@ async function ensureSyncFile() {
   }
 
   const q = encodeURIComponent(`name='${SYNC_FILE_NAME}' and trashed=false`);
-  const searchRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)`, {
+
+  /* ② appDataFolder에서 검색 (drive.appdata 스코프: 동일 앱+동일 사용자면 기기 무관하게 접근 가능) */
+  const appDataRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=appDataFolder&fields=files(id,modifiedTime)`, {
     headers: { "Authorization": `Bearer ${googleAccessToken}` }
   });
-  if (searchRes.status === 401) throw { status: 401 };
-  if (searchRes.ok) {
-    const data = await searchRes.json();
+  if (appDataRes.status === 401) throw { status: 401 };
+  if (appDataRes.ok) {
+    const data = await appDataRes.json();
     if (data.files && data.files.length > 0) {
       cloudConfig.syncFileId = data.files[0].id;
       saveCloudConfig();
       return cloudConfig.syncFileId;
     }
-  } else {
-    throw await buildGoogleApiError(searchRes, "동기화 파일 검색에 실패했습니다.");
   }
 
+  /* ③ 이전 방식(drive 공간) 파일 검색 → 있으면 appDataFolder로 마이그레이션 */
+  const driveRes = await fetch(`https://www.googleapis.com/drive/v3/files?q=${q}&spaces=drive&fields=files(id,modifiedTime)`, {
+    headers: { "Authorization": `Bearer ${googleAccessToken}` }
+  });
+  if (driveRes.status === 401) throw { status: 401 };
+  if (driveRes.ok) {
+    const data = await driveRes.json();
+    if (data.files && data.files.length > 0) {
+      const oldContent = await downloadSyncContent(data.files[0].id);
+      cloudConfig.syncFileId = await createAppDataSyncFile(oldContent || gatherAllLocalData());
+      saveCloudConfig();
+      return cloudConfig.syncFileId;
+    }
+  }
+
+  /* ④ 신규 생성 (appDataFolder) */
+  cloudConfig.syncFileId = await createAppDataSyncFile(gatherAllLocalData());
+  saveCloudConfig();
+  return cloudConfig.syncFileId;
+}
+
+/* appDataFolder에 동기화 파일 생성 (drive.appdata 스코프 필요) */
+async function createAppDataSyncFile(payload) {
   const boundary = "dpsync" + Date.now();
-  const metadata = { name: SYNC_FILE_NAME, mimeType: "application/json" };
-  const initialBody = JSON.stringify(gatherAllLocalData());
+  const metadata = { name: SYNC_FILE_NAME, mimeType: "application/json", parents: ["appDataFolder"] };
   const multipart =
     `--${boundary}\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n` +
     JSON.stringify(metadata) +
     `\r\n--${boundary}\r\nContent-Type: application/json\r\n\r\n` +
-    initialBody +
+    JSON.stringify(payload) +
     `\r\n--${boundary}--`;
 
   const createRes = await fetch("https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id", {
@@ -935,9 +961,7 @@ async function ensureSyncFile() {
   if (createRes.status === 401) throw { status: 401 };
   if (!createRes.ok) throw await buildGoogleApiError(createRes, "동기화 파일 생성에 실패했습니다.");
   const created = await createRes.json();
-  cloudConfig.syncFileId = created.id;
-  saveCloudConfig();
-  return cloudConfig.syncFileId;
+  return created.id;
 }
 
 /* 드라이브 파일 내용 다운로드 */
