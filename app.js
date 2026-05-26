@@ -733,9 +733,16 @@ function embedCalendar() {
   const frame = document.querySelector("#calendarFrame");
   if (!frame || !userEmail) return;
   const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || "Asia/Seoul";
-  /* dates 파라미터를 생략하여 구글 캘린더가 자동으로 현재 실제 날짜가 속한 월을 표시하게 함 */
+  
+  /* 구글 캘린더 월간 뷰 캐시 문제를 방지하기 위해 dates를 이번 달 1일 ~ 다음 달 1일로 명시 */
+  const d = new Date();
+  const startStr = d.getFullYear() + padTwoDigits(d.getMonth() + 1) + "01";
+  d.setMonth(d.getMonth() + 1, 1);
+  const endStr = d.getFullYear() + padTwoDigits(d.getMonth() + 1) + "01";
+
   frame.src = `https://calendar.google.com/calendar/embed?src=${encodeURIComponent(userEmail)}`
-    + `&ctz=${encodeURIComponent(tz)}&mode=MONTH&showTitle=0&showPrint=0&showCalendars=0&showTz=0`;
+    + `&ctz=${encodeURIComponent(tz)}&mode=MONTH&showTitle=0&showPrint=0&showCalendars=0&showTz=0`
+    + `&dates=${startStr}%2F${endStr}`;
 }
 
 /* 로그인 창 호출 */
